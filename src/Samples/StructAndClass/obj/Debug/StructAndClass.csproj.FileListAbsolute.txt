@@ -1,0 +1,6 @@
+C:\Users\daniel.shih\Desktop\Repo\BlogSample\src\Samples\StructAndClass\bin\Debug\StructAndClass.dll
+C:\Users\daniel.shih\Desktop\Repo\BlogSample\src\Samples\StructAndClass\bin\Debug\StructAndClass.pdb
+C:\Users\daniel.shih\Desktop\Repo\BlogSample\src\Samples\StructAndClass\bin\Debug\Microsoft.VisualStudio.QualityTools.UnitTestFramework.dll
+C:\Users\daniel.shih\Desktop\Repo\BlogSample\src\Samples\StructAndClass\obj\Debug\StructAndClass.csprojResolveAssemblyReference.cache
+C:\Users\daniel.shih\Desktop\Repo\BlogSample\src\Samples\StructAndClass\obj\Debug\StructAndClass.dll
+C:\Users\daniel.shih\Desktop\Repo\BlogSample\src\Samples\StructAndClass\obj\Debug\StructAndClass.pdb
