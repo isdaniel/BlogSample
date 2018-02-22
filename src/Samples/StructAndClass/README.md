@@ -11,7 +11,7 @@
 | **型態**       | 值類型            | 參考類型                |
 | **放置記憶體** | Stack上           | Heap上                  |
 | **繼承**       | 只能實現Interface | 可繼承也可實現Interface |
-| **NULL**       | 不能NULL          | 可指向NULL              |
+| **NULL**       | 不能NULL          | 可為NULL              |
 
 ---
 
@@ -68,6 +68,8 @@
 
 ![Img](img/struct1.png)
 
+## (Struct)範例三：
+
     [TestMethod]
     public void StructEquals3()
     {
@@ -90,6 +92,7 @@
 
 ![Img](img/struct3.png)
 
+## (Class)範例：
 
     [TestMethod]
     public void ClassEqualsTest()
