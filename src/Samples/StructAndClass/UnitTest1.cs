@@ -45,7 +45,7 @@ namespace StructAndClass
         {
             ClassType c = new ClassType();
             ClassType c1 = new ClassType();
-
+            
             Assert.AreEqual(c.Equals(c1),false);
         }
 
