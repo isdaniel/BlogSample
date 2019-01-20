@@ -7,3 +7,6 @@ C:\Users\dog83\Desktop\GitHubRepo\BlogSample\src\Samples\YearDiffSample\obj\Debu
 C:\Users\dog83\Desktop\GitHubRepo\BlogSample\src\Samples\YearDiffSample\obj\Debug\YearDiffSample.pdb
 C:\Users\Daniel\Desktop\gitRepo\BlogSample\src\Samples\YearDiffSample\obj\Debug\YearDiffSample.exe
 C:\Users\Daniel\Desktop\gitRepo\BlogSample\src\Samples\YearDiffSample\obj\Debug\YearDiffSample.pdb
+C:\Users\Daniel\Desktop\gitRepo\BlogSample\src\Samples\YearDiffSample\bin\Debug\YearDiffSample.exe
+C:\Users\Daniel\Desktop\gitRepo\BlogSample\src\Samples\YearDiffSample\bin\Debug\YearDiffSample.pdb
+C:\Users\Daniel\Desktop\gitRepo\BlogSample\src\Samples\YearDiffSample\obj\Debug\YearDiffSample.csprojResolveAssemblyReference.cache

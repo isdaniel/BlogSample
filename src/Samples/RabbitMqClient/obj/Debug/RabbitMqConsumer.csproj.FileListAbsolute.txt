@@ -1,0 +1,9 @@
+C:\Users\Daniel\Desktop\gitRepo\BlogSample\src\Samples\RabbitMqClient\bin\Debug\RabbitMqConsumer.exe.config
+C:\Users\Daniel\Desktop\gitRepo\BlogSample\src\Samples\RabbitMqClient\bin\Debug\RabbitMqConsumer.exe
+C:\Users\Daniel\Desktop\gitRepo\BlogSample\src\Samples\RabbitMqClient\bin\Debug\RabbitMqConsumer.pdb
+C:\Users\Daniel\Desktop\gitRepo\BlogSample\src\Samples\RabbitMqClient\bin\Debug\Microsoft.Diagnostics.Tracing.EventSource.dll
+C:\Users\Daniel\Desktop\gitRepo\BlogSample\src\Samples\RabbitMqClient\bin\Debug\RabbitMQ.Client.dll
+C:\Users\Daniel\Desktop\gitRepo\BlogSample\src\Samples\RabbitMqClient\bin\Debug\Microsoft.Diagnostics.Tracing.EventSource.xml
+C:\Users\Daniel\Desktop\gitRepo\BlogSample\src\Samples\RabbitMqClient\bin\Debug\RabbitMQ.Client.xml
+C:\Users\Daniel\Desktop\gitRepo\BlogSample\src\Samples\RabbitMqClient\obj\Debug\RabbitMqConsumer.exe
+C:\Users\Daniel\Desktop\gitRepo\BlogSample\src\Samples\RabbitMqClient\obj\Debug\RabbitMqConsumer.pdb
