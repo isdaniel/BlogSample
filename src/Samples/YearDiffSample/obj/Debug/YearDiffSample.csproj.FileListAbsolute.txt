@@ -5,3 +5,5 @@ C:\Users\daniel.shih\Desktop\Repo\BlogSample\src\Samples\YearDiffSample\obj\Debu
 C:\Users\daniel.shih\Desktop\Repo\BlogSample\src\Samples\YearDiffSample\obj\Debug\YearDiffSample.pdb
 C:\Users\dog83\Desktop\GitHubRepo\BlogSample\src\Samples\YearDiffSample\obj\Debug\YearDiffSample.exe
 C:\Users\dog83\Desktop\GitHubRepo\BlogSample\src\Samples\YearDiffSample\obj\Debug\YearDiffSample.pdb
+C:\Users\Daniel\Desktop\gitRepo\BlogSample\src\Samples\YearDiffSample\obj\Debug\YearDiffSample.exe
+C:\Users\Daniel\Desktop\gitRepo\BlogSample\src\Samples\YearDiffSample\obj\Debug\YearDiffSample.pdb

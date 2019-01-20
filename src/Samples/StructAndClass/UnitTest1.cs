@@ -49,11 +49,48 @@ namespace StructAndClass
             Assert.AreEqual(c.Equals(c1),false);
         }
 
+
+        [TestMethod]
+        public void PropertyStruct()
+        {
+            int updateVal = 100;
+            MyClass myClass = new MyClass()
+            {
+                classA = new ClassA()
+            };
+
+            myClass.structA.UpdagteVal(updateVal);
+            myClass.classA.UpdagteVal(updateVal);
+
+            Assert.AreEqual(updateVal, myClass.classA.iVal);
+
+            Assert.AreEqual(0, myClass.structA.iVal);
+        }
+    }
+
+    public class MyClass
+    {
+        public StructA structA { get; set; }
+        public ClassA classA { get; set; }
+    }
+
+    public struct StructA
+    {
+        public int iVal { get; private set; }
+
+        public void UpdagteVal(int input)
+        {
+            iVal = input;
+        }
     }
 
     public class ClassA
     {
-
+        public int iVal { get; private set; }
+        public void UpdagteVal(int input)
+        {
+            iVal = input;
+        }
     }
 
     public struct StructType 
