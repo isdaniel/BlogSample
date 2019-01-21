@@ -4,3 +4,9 @@ C:\Users\dog83\Desktop\GitHubRepo\BlogSample\src\Samples\ReferenceAndValueType\b
 C:\Users\dog83\Desktop\GitHubRepo\BlogSample\src\Samples\ReferenceAndValueType\obj\Debug\ReferenceAndValueType.csprojResolveAssemblyReference.cache
 C:\Users\dog83\Desktop\GitHubRepo\BlogSample\src\Samples\ReferenceAndValueType\obj\Debug\ReferenceAndValueType.dll
 C:\Users\dog83\Desktop\GitHubRepo\BlogSample\src\Samples\ReferenceAndValueType\obj\Debug\ReferenceAndValueType.pdb
+D:\gitRepo\BlogSample\src\Samples\ReferenceAndValueType\bin\Debug\ReferenceAndValueType.dll
+D:\gitRepo\BlogSample\src\Samples\ReferenceAndValueType\bin\Debug\ReferenceAndValueType.pdb
+D:\gitRepo\BlogSample\src\Samples\ReferenceAndValueType\bin\Debug\Microsoft.VisualStudio.QualityTools.UnitTestFramework.dll
+D:\gitRepo\BlogSample\src\Samples\ReferenceAndValueType\obj\Debug\ReferenceAndValueType.csprojResolveAssemblyReference.cache
+D:\gitRepo\BlogSample\src\Samples\ReferenceAndValueType\obj\Debug\ReferenceAndValueType.dll
+D:\gitRepo\BlogSample\src\Samples\ReferenceAndValueType\obj\Debug\ReferenceAndValueType.pdb

@@ -19,15 +19,15 @@ namespace RabbitMqProducer
                 HostName = "localhost"
             };
             
-            string exchangeName = "exchange2";
-            string routeKey = "hello";
-            string queueName = "q1";
+            string exchangeName = "exchangeDirect";
+            string routeKey = "Direct.Key1";
+            string queueName = "DirectQueue";
 
             using (var connection = factory.CreateConnection())//创建通道
             using (var channel = connection.CreateModel())
             {
                 channel.QueueDeclare(queueName, false, false, false, null);
-                channel.ExchangeDeclare(exchangeName, ExchangeType.Fanout, false, false, null);
+                channel.ExchangeDeclare(exchangeName, ExchangeType.Direct, false, false, null);
 
                 channel.QueueBind(queueName,exchangeName,routeKey);
        

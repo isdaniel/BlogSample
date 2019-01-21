@@ -10,3 +10,9 @@ C:\Users\Daniel\Desktop\gitRepo\BlogSample\src\Samples\StructAndClass\bin\Debug\
 C:\Users\Daniel\Desktop\gitRepo\BlogSample\src\Samples\StructAndClass\obj\Debug\StructAndClass.csprojResolveAssemblyReference.cache
 C:\Users\Daniel\Desktop\gitRepo\BlogSample\src\Samples\StructAndClass\obj\Debug\StructAndClass.dll
 C:\Users\Daniel\Desktop\gitRepo\BlogSample\src\Samples\StructAndClass\obj\Debug\StructAndClass.pdb
+D:\gitRepo\BlogSample\src\Samples\StructAndClass\bin\Debug\StructAndClass.dll
+D:\gitRepo\BlogSample\src\Samples\StructAndClass\bin\Debug\StructAndClass.pdb
+D:\gitRepo\BlogSample\src\Samples\StructAndClass\bin\Debug\Microsoft.VisualStudio.QualityTools.UnitTestFramework.dll
+D:\gitRepo\BlogSample\src\Samples\StructAndClass\obj\Debug\StructAndClass.csprojResolveAssemblyReference.cache
+D:\gitRepo\BlogSample\src\Samples\StructAndClass\obj\Debug\StructAndClass.dll
+D:\gitRepo\BlogSample\src\Samples\StructAndClass\obj\Debug\StructAndClass.pdb

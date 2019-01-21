@@ -19,18 +19,14 @@ namespace RabbitMqConsumer
                 HostName = "localhost"
             };
 
-            string exchangeName = "exchange2";
-            string routeKey = "hello";
-            string queueName = "q1";
+            string exchangeName = "exchangeDirect";
+            string routeKey = "Direct.Key1";
+            string queueName = "DirectQueue";
 
             using (var connection = factory.CreateConnection())
             using (var channel = connection.CreateModel())
             {
-                //channel.ExchangeDeclare(exchangeName, ExchangeType.Direct);
-                channel.ExchangeBind(exchangeName, exchangeName, routeKey);
-                //channel.QueueDeclare(queueName, false, false, false, null);
                 channel.QueueBind(queueName, exchangeName, routeKey); //綁定一個消費者
-       
 
                 EventingBasicConsumer consumer = new EventingBasicConsumer(channel);
        
@@ -47,11 +43,9 @@ namespace RabbitMqConsumer
 
                 channel.BasicConsume(queueName, false, consumer);
 
-              
+
+                Console.ReadKey();
             }
-
-            Console.ReadLine();
-
         }
     }
 }

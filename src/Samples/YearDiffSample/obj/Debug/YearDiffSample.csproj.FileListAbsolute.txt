@@ -10,3 +10,8 @@ C:\Users\Daniel\Desktop\gitRepo\BlogSample\src\Samples\YearDiffSample\obj\Debug\
 C:\Users\Daniel\Desktop\gitRepo\BlogSample\src\Samples\YearDiffSample\bin\Debug\YearDiffSample.exe
 C:\Users\Daniel\Desktop\gitRepo\BlogSample\src\Samples\YearDiffSample\bin\Debug\YearDiffSample.pdb
 C:\Users\Daniel\Desktop\gitRepo\BlogSample\src\Samples\YearDiffSample\obj\Debug\YearDiffSample.csprojResolveAssemblyReference.cache
+D:\gitRepo\BlogSample\src\Samples\YearDiffSample\bin\Debug\YearDiffSample.exe
+D:\gitRepo\BlogSample\src\Samples\YearDiffSample\bin\Debug\YearDiffSample.pdb
+D:\gitRepo\BlogSample\src\Samples\YearDiffSample\obj\Debug\YearDiffSample.csprojResolveAssemblyReference.cache
+D:\gitRepo\BlogSample\src\Samples\YearDiffSample\obj\Debug\YearDiffSample.exe
+D:\gitRepo\BlogSample\src\Samples\YearDiffSample\obj\Debug\YearDiffSample.pdb
