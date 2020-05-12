@@ -19,7 +19,7 @@ namespace RabbitMqConsumer
                 HostName = "localhost"
             };
 
-            string exchangeName = "exchangeDirect";
+            string exchangeName = "amq.direct";
             string routeKey = "Direct.Key1";
             string queueName = "DirectQueue";
 

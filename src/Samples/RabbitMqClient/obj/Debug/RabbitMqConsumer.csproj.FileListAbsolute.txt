@@ -17,3 +17,6 @@ D:\gitRepo\BlogSample\src\Samples\RabbitMqClient\bin\Debug\RabbitMQ.Client.xml
 D:\gitRepo\BlogSample\src\Samples\RabbitMqClient\obj\Debug\RabbitMqConsumer.exe
 D:\gitRepo\BlogSample\src\Samples\RabbitMqClient\obj\Debug\RabbitMqConsumer.pdb
 D:\gitRepo\BlogSample\src\Samples\RabbitMqClient\obj\Debug\RabbitMqConsumer.csprojResolveAssemblyReference.cache
+D:\MyRepo\BlogSample\src\Samples\RabbitMqClient\bin\Debug\RabbitMqConsumer.exe.config
+D:\MyRepo\BlogSample\src\Samples\RabbitMqClient\obj\Debug\RabbitMqConsumer.exe
+D:\MyRepo\BlogSample\src\Samples\RabbitMqClient\obj\Debug\RabbitMqConsumer.pdb
