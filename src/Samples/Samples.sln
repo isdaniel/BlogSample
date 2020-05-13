@@ -1,7 +1,7 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
-# Visual Studio 14
-VisualStudioVersion = 14.0.25420.1
+# Visual Studio 15
+VisualStudioVersion = 15.0.28307.1082
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "YearDiffSample", "YearDiffSample\YearDiffSample.csproj", "{1246BFFB-0EB3-4D86-8FCB-EE6D353F4423}"
 EndProject
@@ -14,6 +14,8 @@ EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "RabbitMqConsumer", "RabbitMqClient\RabbitMqConsumer.csproj", "{F9E7BC4C-6589-4395-8133-D0A896593E85}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "RabbitMqProducer", "RabbitMqProducer\RabbitMqProducer.csproj", "{CE61D5D7-9F00-4A9A-B443-AEBD7D145E1C}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Box_UnBoxing", "Box_UnBoxing\Box_UnBoxing.csproj", "{0AA20966-CDAF-41E5-A37F-9EF783F7C67D}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -41,6 +43,10 @@ Global
 		{CE61D5D7-9F00-4A9A-B443-AEBD7D145E1C}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{CE61D5D7-9F00-4A9A-B443-AEBD7D145E1C}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{CE61D5D7-9F00-4A9A-B443-AEBD7D145E1C}.Release|Any CPU.Build.0 = Release|Any CPU
+		{0AA20966-CDAF-41E5-A37F-9EF783F7C67D}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{0AA20966-CDAF-41E5-A37F-9EF783F7C67D}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{0AA20966-CDAF-41E5-A37F-9EF783F7C67D}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{0AA20966-CDAF-41E5-A37F-9EF783F7C67D}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -48,5 +54,8 @@ Global
 	GlobalSection(NestedProjects) = preSolution
 		{F9E7BC4C-6589-4395-8133-D0A896593E85} = {3F5907F8-1FC9-40E7-B89B-91BCAFC020C8}
 		{CE61D5D7-9F00-4A9A-B443-AEBD7D145E1C} = {3F5907F8-1FC9-40E7-B89B-91BCAFC020C8}
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {B698775C-D2AA-4C37-A600-36E893F30D31}
 	EndGlobalSection
 EndGlobal
