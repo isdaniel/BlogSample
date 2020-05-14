@@ -19,8 +19,9 @@ namespace Box_UnBoxing
             {
                 s = $"{times}";
             }
+            
             sw.Stop();
-            Console.WriteLine(sw.ElapsedMilliseconds);
+            Console.WriteLine($"times:{sw.ElapsedMilliseconds}");
 
             sw.Restart();
             for (int i = 0; i < times ; i++)
@@ -28,7 +29,8 @@ namespace Box_UnBoxing
                 s = $"{times.ToString()}";
             }
             sw.Stop();
-            Console.WriteLine(sw.ElapsedMilliseconds);
+            Console.WriteLine($"times.ToString():{sw.ElapsedMilliseconds}");
+
             Console.ReadKey();
         }
     }
