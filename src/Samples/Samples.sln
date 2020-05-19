@@ -17,6 +17,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "RabbitMqProducer", "RabbitM
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Box_UnBoxing", "Box_UnBoxing\Box_UnBoxing.csproj", "{0AA20966-CDAF-41E5-A37F-9EF783F7C67D}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ParameterConvertor", "ParameterConvertor\ParameterConvertor.csproj", "{80819441-F06A-4572-AFA0-802BC6C780B4}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -47,6 +49,10 @@ Global
 		{0AA20966-CDAF-41E5-A37F-9EF783F7C67D}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{0AA20966-CDAF-41E5-A37F-9EF783F7C67D}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{0AA20966-CDAF-41E5-A37F-9EF783F7C67D}.Release|Any CPU.Build.0 = Release|Any CPU
+		{80819441-F06A-4572-AFA0-802BC6C780B4}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{80819441-F06A-4572-AFA0-802BC6C780B4}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{80819441-F06A-4572-AFA0-802BC6C780B4}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{80819441-F06A-4572-AFA0-802BC6C780B4}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
