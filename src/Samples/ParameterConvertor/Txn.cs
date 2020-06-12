@@ -24,7 +24,7 @@ namespace ParameterConvertor
 
         public Decimal? BasePrice { get; set; }
 
-        public Decimal? ReturnPrice { get; set; }
+        public Decimal? ReturnAmount { get; set; }
 
         public ProcessStatus ProcessStatus { get; set; }
 
