@@ -21,6 +21,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ParameterConvertor", "Param
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MultiThreadSample", "MutiThreadSample\MultiThreadSample.csproj", "{9CAD17A3-A05F-4A59-8517-91B3093A43A4}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ExpressionVsReflection", "ExpressionVsReflection\ExpressionVsReflection.csproj", "{66D3D880-2AE8-47AB-9208-4CAD8B58A105}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -59,6 +61,10 @@ Global
 		{9CAD17A3-A05F-4A59-8517-91B3093A43A4}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{9CAD17A3-A05F-4A59-8517-91B3093A43A4}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{9CAD17A3-A05F-4A59-8517-91B3093A43A4}.Release|Any CPU.Build.0 = Release|Any CPU
+		{66D3D880-2AE8-47AB-9208-4CAD8B58A105}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{66D3D880-2AE8-47AB-9208-4CAD8B58A105}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{66D3D880-2AE8-47AB-9208-4CAD8B58A105}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{66D3D880-2AE8-47AB-9208-4CAD8B58A105}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
