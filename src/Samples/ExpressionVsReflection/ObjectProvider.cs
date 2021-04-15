@@ -21,45 +21,37 @@ namespace ExpressionVsReflection
 
         public static Func<T> ExpressionCreator<T>()
         {
-            var key = typeof(T).Name;
+            ConstructorInfo ctor = typeof(T).GetConstructors().FirstOrDefault();
 
-            if (!_mapFunc.TryGetValue(key, out Delegate result))
+            ParameterInfo[] paramsInfo = ctor.GetParameters();
+
+            ParameterExpression param =
+                Expression.Parameter(typeof(object[]), "args");
+
+            Expression[] argsExp =
+                new Expression[paramsInfo.Length];
+
+            for (int i = 0; i < paramsInfo.Length; i++)
             {
-                ConstructorInfo ctor = typeof(T).GetConstructors().FirstOrDefault();
+                Expression index = Expression.Constant(i);
+                Type paramType = paramsInfo[i].ParameterType;
 
-                ParameterInfo[] paramsInfo = ctor.GetParameters();
+                Expression paramAccessorExp =
+                    Expression.ArrayIndex(param, index);
 
-                ParameterExpression param =
-                    Expression.Parameter(typeof(object[]), "args");
+                Expression paramCastExp =
+                    Expression.Convert(paramAccessorExp, paramType);
 
-                Expression[] argsExp =
-                    new Expression[paramsInfo.Length];
-
-                for (int i = 0; i < paramsInfo.Length; i++)
-                {
-                    Expression index = Expression.Constant(i);
-                    Type paramType = paramsInfo[i].ParameterType;
-
-                    Expression paramAccessorExp =
-                        Expression.ArrayIndex(param, index);
-
-                    Expression paramCastExp =
-                        Expression.Convert(paramAccessorExp, paramType);
-
-                    argsExp[i] = paramCastExp;
-                }
-
-                NewExpression newExp = Expression.New(ctor, argsExp);
-
-                LambdaExpression lambda = Expression.Lambda(typeof(Func<T>), newExp, param);
-
-                result = lambda.Compile();
-
-                _mapFunc.GetOrAdd(key, result);
+                argsExp[i] = paramCastExp;
             }
 
+            NewExpression newExp = Expression.New(ctor, argsExp);
 
-            return (Func<T>)result;
+            LambdaExpression lambda = Expression.Lambda(typeof(Func<T>), newExp, param);
+
+            return (Func<T>)lambda.Compile();
+
+            
         }
     }
 }
