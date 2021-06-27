@@ -5,13 +5,14 @@
   <PropertyGroup>
     <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
     <Platform Condition=" '$(Platform)' == '' ">AnyCPU</Platform>
-    <ProjectGuid>{0AA20966-CDAF-41E5-A37F-9EF783F7C67D}</ProjectGuid>
+    <ProjectGuid>{66D3D880-2AE8-47AB-9208-4CAD8B58A105}</ProjectGuid>
     <OutputType>Exe</OutputType>
-    <RootNamespace>Box_UnBoxing</RootNamespace>
-    <AssemblyName>Box_UnBoxing</AssemblyName>
+    <RootNamespace>ExpressionVsReflection</RootNamespace>
+    <AssemblyName>ExpressionVsReflection</AssemblyName>
     <TargetFrameworkVersion>v4.6.1</TargetFrameworkVersion>
     <FileAlignment>512</FileAlignment>
     <AutoGenerateBindingRedirects>true</AutoGenerateBindingRedirects>
+    <Deterministic>true</Deterministic>
     <NuGetPackageImportStamp>
     </NuGetPackageImportStamp>
   </PropertyGroup>
@@ -217,6 +218,7 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="Config.cs" />
+    <Compile Include="ObjectProvider.cs" />
     <Compile Include="Program.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>
