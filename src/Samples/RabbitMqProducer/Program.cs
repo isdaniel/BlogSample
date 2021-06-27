@@ -18,19 +18,22 @@ namespace RabbitMqProducer
                 Password = "guest",
                 HostName = "localhost"
             };
-            
-            string exchangeName = "amq.direct";
-            string routeKey = "Direct.Key1";
-            string queueName = "DirectQueue";
+
+            string exchangeName = "my.Exchange";
+            string routeKey = "my.routing";
+            string queueName = "my.queue";
 
             using (var connection = factory.CreateConnection())//创建通道
             using (var channel = connection.CreateModel())
             {
-                channel.QueueDeclare(queueName, false, false, false, null);
-                channel.ExchangeDeclare(exchangeName, ExchangeType.Direct, false, false, null);
-
-                channel.QueueBind(queueName,exchangeName,routeKey);
-       
+                #region 如果在RabbitMq手動建立可以忽略這段程式
+                //建立一個Queue
+                channel.QueueDeclare(queueName, true, false, false, null);
+                //建立一個Exchange
+                channel.ExchangeDeclare(exchangeName, ExchangeType.Direct, true, false, null);
+                //把Queue跟Exchange
+                channel.QueueBind(queueName, exchangeName, routeKey); 
+                #endregion
 
                 Console.WriteLine("\nRabbitMQ連接成功,如需離開請按下Escape鍵");
 
@@ -39,12 +42,15 @@ namespace RabbitMqProducer
                 {
                     input = Console.ReadLine();
 
-                    var sendBytes = Encoding.UTF8.GetBytes(input);
-                    //發布訊息到RabbitMQ Server
-                    channel.BasicPublish(exchangeName, routeKey, null, sendBytes);
+                    var messageBytes = Encoding.UTF8.GetBytes(input);
+                    channel.BasicPublish(exchange: exchangeName,
+                                         routingKey: routeKey,
+                                         body: messageBytes);
 
                 } while (Console.ReadKey().Key != ConsoleKey.Escape);
             }
         }
+
+    
     }
 }

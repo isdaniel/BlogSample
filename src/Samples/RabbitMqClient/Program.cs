@@ -16,22 +16,18 @@ namespace RabbitMqConsumer
             {
                 UserName = "guest",
                 Password = "guest",
-                HostName = "localhost"
+                HostName = "127.0.0.1",
+                Port = 5672
             };
 
-            string exchangeName = "amq.direct";
-            string routeKey = "Direct.Key1";
             string queueName = "DirectQueue";
 
             using (var connection = factory.CreateConnection())
             using (var channel = connection.CreateModel())
             {
-                channel.QueueBind(queueName, exchangeName, routeKey); //綁定一個消費者
-
+                //channel.QueueBind
                 EventingBasicConsumer consumer = new EventingBasicConsumer(channel);
-       
                 channel.BasicQos(0, 1, false);
-               
                 //接收到消息事件 consumer.IsRunning
                 consumer.Received += (ch, ea) =>
                 {
@@ -41,11 +37,11 @@ namespace RabbitMqConsumer
                     channel.BasicAck(ea.DeliveryTag, false);
                 };
 
-                channel.BasicConsume(queueName, false, consumer);
-
-
+                channel.BasicConsume(queueName, false, consumer); 
+                Console.WriteLine("接收訊息");
                 Console.ReadKey();
             }
+
         }
     }
 }
