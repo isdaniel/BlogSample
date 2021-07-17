@@ -22,8 +22,8 @@ namespace EventWaitHandleSample
     {
         static void Main(string[] args)
         {
-            Caller c = new Caller();
-            var t1 = new Thread(() => c.Call(new CallerInfo() { Index = 1,Name = "A"}));
+            Alternate c = new Alternate();
+            var t1 = new Thread(() => c.Call(new CallerInfo() { Index = 1,Name = "A" }));
             var t2 = new Thread(() => c.Call(new CallerInfo() { Index = 2, Name = "B" }));
             var t3 = new Thread(() => c.Call(new CallerInfo() { Index = 3, Name = "C" }));
 
@@ -44,7 +44,7 @@ namespace EventWaitHandleSample
         public string Name { get; set; }
     }
 
-    public class Caller {
+    public class Alternate {
         private class NotifyMap {
             public AutoResetEvent Wait { get; set; } 
             public AutoResetEvent Notify { get; set; }
@@ -56,7 +56,7 @@ namespace EventWaitHandleSample
         AutoResetEvent notifyB = new AutoResetEvent(false);
         AutoResetEvent notifyC = new AutoResetEvent(false);
 
-        public Caller()
+        public Alternate()
         {
             _notifyMapping = new Dictionary<int, NotifyMap>
             {
@@ -76,7 +76,7 @@ namespace EventWaitHandleSample
                 var notifyMap = _notifyMapping[caller.Index];
                 if (key != caller.Index)
                     notifyMap.Wait.WaitOne();
-                Console.WriteLine($"[{i}]:{caller.Name}");
+                Console.WriteLine($"{caller.Name}");
                 index++;
                 notifyMap.Notify.Set();
             }
