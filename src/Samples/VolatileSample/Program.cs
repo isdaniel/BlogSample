@@ -7,21 +7,20 @@ namespace VolatileSample
     {
         static void Main(string[] args)
         {
-            int val = Convert.ToInt32(Console.ReadLine());
-            Member member = new Member() { Balance = val };
-
-            var t1 = new Thread(member.UpdateBalance);
-            t1.Start();
-
-            while (true)
+            
+            Member member = new Member();
+            new Thread(()=>{
+                
+                System.Console.WriteLine($"Sleep 前~ 餘額剩下:{member.balance}");
+                member.UpdateBalance();
+                System.Console.WriteLine($"Sleep 結束! 餘額剩下:{member.balance}");
+            }).Start();
+            
+            while (member.balance > 0)
             {
-                if (member.Balance <= 0)
-                {
-                    Console.WriteLine("餘額小於0");
-                    break;
-                }
-              
-            }
+               
+            }   
+            Thread.Sleep(50);
             Console.WriteLine("執行結束!");
             Console.ReadKey();
         }
@@ -29,17 +28,10 @@ namespace VolatileSample
 
     public class Member
     {
-        //public volatile int Balance;
-        public int Balance;
+        public int balance = 100;
         public void UpdateBalance()
         {
-            Console.WriteLine("開始扣款");
-            while (Balance > 0)
-            {
-                Balance -= 10;
-                //Thread.Sleep(200);
-            }
-            Console.WriteLine($"餘額={Balance}");
+             balance = 0;  
         }
     }
 }
