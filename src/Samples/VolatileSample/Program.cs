@@ -1,5 +1,7 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.Threading;
+using System.Threading.Tasks;
 
 namespace VolatileSample
 {
@@ -7,39 +9,52 @@ namespace VolatileSample
     {
         static void Main(string[] args)
         {
-            int val = Convert.ToInt32(Console.ReadLine());
-            Member member = new Member() { Balance = val };
+            
+            // Member member = new Member();
+            // new Thread(()=>{
+                
+            //     System.Console.WriteLine($"Sleep 前~ 餘額剩下:{member.balance}");
+            //     member.UpdateBalance();
+            //     System.Console.WriteLine($"Sleep 結束! 餘額剩下:{member.balance}");
+            // }).Start();
+            // while (member.balance > 0)
+            // {
+            //    //等待sub thread把balance改成0跳出迴圈
+            // }   
+            // Thread.Sleep(50);
+            // Console.WriteLine("執行結束!");
 
-            var t1 = new Thread(member.UpdateBalance);
-            t1.Start();
+            NoAtomicMember m = new NoAtomicMember();
+            List<Task> tasks = new List<Task>();
 
-            while (true)
+            for (var i = 0; i < 10; i++)
             {
-                if (member.Balance <= 0)
-                {
-                    Console.WriteLine("餘額小於0");
-                    break;
-                }
-              
+                tasks.Add(Task.Run(()=>{
+                    for (var i = 0; i < 10000; i++)
+                    {
+                        m.AddBalance();
+                    }
+                }));
             }
-            Console.WriteLine("執行結束!");
+            Task.WaitAll(tasks.ToArray());
+
+            System.Console.WriteLine(m.balance);
             Console.ReadKey();
         }
     }
-
+    public class NoAtomicMember{
+          public int balance = 0;
+          public void AddBalance(){
+            balance+=10;
+          }
+    }
     public class Member
     {
-        //public volatile int Balance;
-        public int Balance;
+        public volatile int balance = 100;
         public void UpdateBalance()
         {
-            Console.WriteLine("開始扣款");
-            while (Balance > 0)
-            {
-                Balance -= 10;
-                //Thread.Sleep(200);
-            }
-            Console.WriteLine($"餘額={Balance}");
+            // sub thread update balance to 0
+            balance = 0;  
         }
     }
 }
