@@ -6,52 +6,64 @@ using System.Text.RegularExpressions;
 
 namespace PolandNotation
 {
-
-
-    /*
-    
-    Input: tokens = ["10","6","9","3","+","-11","*","/","*","17","+","5","+"]
-    Output: 22
-    Explanation: ((10 * (6 / ((9 + 3) * -11))) + 17) + 5
-    = ((10 * (6 / (12 * -11))) + 17) + 5
-    = ((10 * (6 / -132)) + 17) + 5
-    = ((10 * 0) + 17) + 5
-    = (0 + 17) + 5
-    = 17 + 5
-    = 22
-    */
     public class Solution {
         string[] _opres = new string[]{"+","-","*","/"};
+
+        IEnumerable<string> ToExpressionList(string formula){
+            formula = formula.Replace(" ","");
+            StringBuilder num = new StringBuilder();
+            List<string> result = new List<string>();
+            int index = 0;         
+            do
+            {
+                if (!IsNumber(formula[index]))
+                {
+                    result.Add(formula[index].ToString());
+                    index++;
+                }else
+                {
+                    while (index < formula.Length && IsNumber(formula[index]))
+                    {
+                        num.Append(formula[index]);
+                        index++;
+                    }
+                    result.Add(num.ToString());
+                    num.Clear();
+                }
+            } while (index < formula.Length);
+
+            return result;
+        }
+
+        static bool IsNumber(char c){
+            return c >= '0' && c <= '9';
+        }
 
         private IEnumerable<string> ToSuffixExpression(IEnumerable<string> tokens){
             List<string> result = new List<string>();
             Stack<string> operStack = new Stack<string>();
+
             foreach (var item in tokens)
             {
                 if (Regex.IsMatch(item,"\\d"))
                 {
                     result.Add(item);
-                }else
-                {
-                    if(operStack.Count == 0 || item == "(")
+                }else if (operStack.Count == 0 || item == "("){
+                    operStack.Push(item);
+                }else if (item == ")"){
+
+                    while (operStack.Peek()!= "(")
                     {
-                        operStack.Push(item);
-                    }else if(item == ")"){
-                        while (operStack.Peek() != "(")
-                        {
-                            result.Add(operStack.Pop());
-                        }
-                        operStack.Pop();
+                        result.Add(operStack.Pop());
                     }
-                    else 
+                    operStack.Pop();
+                } else {
+                    while (operStack.Count > 0 && OperPriority(item) <= OperPriority(operStack.Peek()))
                     {
-                        while (operStack.Count != 0 && OperPriority(operStack.Peek()) >= OperPriority(item))
-                        {
-                            result.Add(operStack.Pop());
-                        }
-                        
-                        operStack.Push(item);
+                        result.Add(operStack.Pop());
                     }
+                    
+                    operStack.Push(item);
                 }
             }
 
@@ -62,13 +74,14 @@ namespace PolandNotation
 
             return result;
         }
-        public int EvalRPN(IEnumerable<string> tokens) {
+        public decimal EvalRPN(string formula) {
+            var tokens = ToExpressionList(formula);
             var suffixExpression = ToSuffixExpression(tokens);
-            Stack<int> numStack = new Stack<int>();
+            Stack<decimal> numStack = new Stack<decimal>();
             foreach (var item in suffixExpression)
             {
                 if (Regex.IsMatch(item,"\\d")){
-                    numStack.Push(int.Parse(item));
+                    numStack.Push(decimal.Parse(item));
                 }else
                 {
                     numStack.Push(CalcByOper(item,numStack.Pop(),numStack.Pop()));
@@ -78,7 +91,7 @@ namespace PolandNotation
             return numStack.Pop();
         }
 
-        private int CalcByOper(string oper,int n1,int n2){
+        private decimal CalcByOper(string oper,decimal n1,decimal n2){
             if (oper == "+")
             {
                 return n2 + n1;
@@ -204,7 +217,7 @@ namespace PolandNotation
             return -1;
         }
 
-        public IEnumerable<string> ToExpressionList(string formula){
+        IEnumerable<string> ToExpressionList(string formula){
             formula = formula.Replace(" ","");
             int index = 0;
             List<string> result = new List<string>();
@@ -233,7 +246,6 @@ namespace PolandNotation
         static bool IsNumber(char c){
             return c >= '0' && c <= '9';
         }
-
     }
     
     class Program
@@ -241,9 +253,7 @@ namespace PolandNotation
         static void Main(string[] args)
         {
             Solution solution = new Solution();
-            Calculator c = new  Calculator();
-            System.Console.WriteLine(c.Calc("(5+6) * 5 + 1"));
-            System.Console.WriteLine(solution.EvalRPN(c.ToExpressionList("(5+6) * 5+1")));
+            System.Console.WriteLine(solution.EvalRPN("(5+6) * 5+1 * (1+3)/8"));
             Console.WriteLine("Hello World!");
         }
     }
