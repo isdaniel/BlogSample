@@ -22,21 +22,56 @@ namespace PolandNotation
     */
     public class Solution {
         string[] _opres = new string[]{"+","-","*","/"};
-        public int EvalRPN(string[] tokens) {
-            Stack<int> numStack = new Stack<int>();
-            Stack<string> operStack = new Stack<string>();
 
+        private IEnumerable<string> ToSuffixExpression(IEnumerable<string> tokens){
+            List<string> result = new List<string>();
+            Stack<string> operStack = new Stack<string>();
             foreach (var item in tokens)
             {
-                if (_opres.Any(x=> x == item))
+                if (Regex.IsMatch(item,"\\d"))
                 {
-                    var num1 = numStack.Pop();
-                    var num2 = numStack.Pop();
-                    var res = CalcByOper(item,num2,num1);
-                    numStack.Push(res);
+                    result.Add(item);
                 }else
                 {
+                    if(operStack.Count == 0 || item == "(")
+                    {
+                        operStack.Push(item);
+                    }else if(item == ")"){
+                        while (operStack.Peek() != "(")
+                        {
+                            result.Add(operStack.Pop());
+                        }
+                        operStack.Pop();
+                    }
+                    else 
+                    {
+                        while (operStack.Count != 0 && OperPriority(operStack.Peek()) >= OperPriority(item))
+                        {
+                            result.Add(operStack.Pop());
+                        }
+                        
+                        operStack.Push(item);
+                    }
+                }
+            }
+
+            while (operStack.Count > 0)
+            {
+                result.Add(operStack.Pop());
+            }
+
+            return result;
+        }
+        public int EvalRPN(IEnumerable<string> tokens) {
+            var suffixExpression = ToSuffixExpression(tokens);
+            Stack<int> numStack = new Stack<int>();
+            foreach (var item in suffixExpression)
+            {
+                if (Regex.IsMatch(item,"\\d")){
                     numStack.Push(int.Parse(item));
+                }else
+                {
+                    numStack.Push(CalcByOper(item,numStack.Pop(),numStack.Pop()));
                 }
             }
 
@@ -46,59 +81,34 @@ namespace PolandNotation
         private int CalcByOper(string oper,int n1,int n2){
             if (oper == "+")
             {
-                return n1 + n2;
+                return n2 + n1;
             } else if (oper == "-")
             {
-                return n1 - n2;
+                return n2 - n1;
             }else if (oper == "*")
             {
-                return n1 * n2;
+                return n2 * n1;
             }else if (oper == "/")
             {
-                return n1 / n2;
+                return n2 / n1;
             }
 
             throw new Exception();
         }
+
+        private int OperPriority(string oper){
+            if (oper == "*" || oper == "/" )
+            {
+                return 2;
+            }else if (oper == "+" || oper == "-")
+            {
+                return 1;
+            }
+
+            return -1;
+        }
     }
-    // public class Calculator{
-    //     public int Calc(IEnumerable<string> suffixList){
-    //         Stack<string> numStack = new Stack<string>();
 
-    //         foreach (var item in suffixList)
-    //         {
-    //             if (Regex.IsMatch(item,"\\d"))
-    //             {
-    //                 numStack.Push(item);
-    //             }else{
-                    
-    //                 int num1 = int.Parse(numStack.Pop());
-    //                 int num2 = int.Parse(numStack.Pop());
-    //                 numStack.Push(CalcByOper(item,num2,num1).ToString());
-    //             }
-    //         }
-
-    //         return int.Parse(numStack.Pop());
-    //     }
-
-    //     private int CalcByOper(string oper,int n1,int n2){
-    //         if (oper == "+")
-    //         {
-    //             return n1 + n2;
-    //         } else if (oper == "-")
-    //         {
-    //             return n1 - n2;
-    //         }else if (oper == "x" || oper == "*")
-    //         {
-    //             return n1 * n2;
-    //         }else if (oper == "/")
-    //         {
-    //             return n1 / n2;
-    //         }
-
-    //         throw new Exception("不支援此操做符號");
-    //     }
-    // }
     
     public class Calculator{
         string[] _opres = new string[]{"+","-","x","*","/","(",")"};
@@ -194,7 +204,8 @@ namespace PolandNotation
             return -1;
         }
 
-        IEnumerable<string> ToExpressionList(string formula){
+        public IEnumerable<string> ToExpressionList(string formula){
+            formula = formula.Replace(" ","");
             int index = 0;
             List<string> result = new List<string>();
             StringBuilder num = new StringBuilder();
@@ -229,8 +240,10 @@ namespace PolandNotation
     {
         static void Main(string[] args)
         {
+            Solution solution = new Solution();
             Calculator c = new  Calculator();
-            System.Console.WriteLine(c.Calc("(5+6)*5+1"));
+            System.Console.WriteLine(c.Calc("(5+6) * 5 + 1"));
+            System.Console.WriteLine(solution.EvalRPN(c.ToExpressionList("(5+6) * 5+1")));
             Console.WriteLine("Hello World!");
         }
     }
