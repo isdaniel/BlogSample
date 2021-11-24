@@ -165,7 +165,6 @@ namespace PolandNotation
 
             return int.Parse(numStack.Pop());
         }
-
         private bool IsCalcOper(string item)
         {
             return operStack.Count != 0 &&
