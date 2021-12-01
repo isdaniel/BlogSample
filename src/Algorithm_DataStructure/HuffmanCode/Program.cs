@@ -16,21 +16,16 @@ namespace Huffman
             var nodeList = input.GroupBy(x => x).Select(x => new Node { Weight = x.Count(), c = x.Key }).ToList();
             var huffmanTree = CreateHuffmanTree(nodeList);
             var huffmanCodes = huffmanTree.ScanTree();
-            HuffmanCompression huffman = new HuffmanCompression();
-            var compressResult = huffman.Zip(input,huffmanCodes);  
-            var originalData = huffman.UnZip(compressResult.compressBuffer, huffmanTree, compressResult.bitLength);
+            HuffmanCompression huffman = new HuffmanCompression(huffmanTree);
+            var compressResult = huffman.Zip(input);  
+            var originalData = huffman.UnZip(compressResult.compressBuffer, compressResult.bitLength);
 
             int originalLenght = Encoding.UTF8.GetBytes(input).Length;
             int compressionLenght = compressResult.compressBuffer.Length;
 
-            
-
             Console.WriteLine($"Compress percentage:{(originalLenght - compressionLenght) / (decimal)originalLenght}");
             Console.WriteLine($"Data is : {originalData}");
         }
-
-        
-        
 
         static Node CreateHuffmanTree(List<Node> nodes){
 

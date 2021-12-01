@@ -7,39 +7,42 @@ using System.Text;
 namespace Huffman
 {
     public class HuffmanCompression{
-        public (byte[] compressBuffer,int bitLength) Zip(string s,Dictionary<char,string> huffmanCodes)
+        private Dictionary<char,string> _huffmanCodes;
+        public Node HuffmanTree { get; }
+        public HuffmanCompression(Node huffmanTree)
         {
-            var bitString = string.Join("", s.Select(x => huffmanCodes[x]));
+            this.HuffmanTree = huffmanTree;
+            _huffmanCodes = HuffmanTree.ScanTree();
+            
+        }
+        public (byte[] compressBuffer,int bitLength) Zip(string s)
+        {
+            var bitString = string.Join("", s.Select(x => _huffmanCodes[x]));
             var bitArray = new BitArray(bitString.Select(c => c == '1').Reverse().ToArray());
             var huffmanCodeBytes = new byte[(bitArray.Length + 7)/8];
             bitArray.CopyTo(huffmanCodeBytes,0);
             return (huffmanCodeBytes, bitArray.Length);
         }
 
-        private string ByteToBitString(byte b,bool flag, int bitLength)
+        //byte => bit
+        private string ByteToBitString(short val,bool isLastByte, int bitLength)
         {
-            short temp = b;
-            if (flag)
-            {
-                temp |= 256;
-            }
-
-            string result = Convert.ToString(temp,2);
-
-            if (flag)
-            {
-                return result.Substring(result.Length - 8);
-            }
-            
             //判斷需要補位0
-            return result.PadLeft(bitLength % 8, '0');
+            if (isLastByte)
+            {
+                return Convert.ToString(val,2).PadLeft(bitLength % 8, '0');
+            }
+
+            string result = Convert.ToString(val |= 256,2);
+
+            return result.Substring(result.Length - 8);
         }
 
-        public string UnZip(byte[] buffer,Node huffmanTree,int bitLength)
+        public string UnZip(byte[] buffer,int bitLength)
         {
-            var bitString = string.Join("",buffer.Select((x,i)=> ByteToBitString(x, i != buffer.Length - 1, bitLength)).Reverse());
+            var bitString = string.Join("",buffer.Select((x,i)=> ByteToBitString((short)x, i == buffer.Length - 1, bitLength)).Reverse());
             var sb = new StringBuilder();
-            Node cur = huffmanTree;
+            Node cur = HuffmanTree;
 
             for (int i = 0; i < bitString.Length; i++)
             {
@@ -53,7 +56,7 @@ namespace Huffman
                 if (cur.c != '\0')
                 {
                     sb.Append(cur.c);
-                    cur = huffmanTree;
+                    cur = HuffmanTree;
                 }
             }
 
