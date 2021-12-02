@@ -12,91 +12,20 @@ namespace Huffman
     {
         static void Main(string[] args)
         {
-            string input = "I like like c# elephant lion!! 你好世界";
-            var nodeList = input.GroupBy(x => x).Select(x => new Node { Weight = x.Count(), c = x.Key }).ToList();
-            var huffmanTree = CreateHuffmanTree(nodeList);
-            var huffmanCodes = huffmanTree.ScanTree();
-            HuffmanCompression huffman = new HuffmanCompression(huffmanTree);
-            var compressResult = huffman.Zip(input);  
-            var originalData = huffman.UnZip(compressResult.compressBuffer, compressResult.bitLength);
+            // string input = "I like like c# elephant lion!! 你好世界";
+            // HuffmanCompression huffman = new HuffmanCompression();
+            // var compressResult = huffman.Zip(input);  
+            // var originalData = huffman.UnZip(compressResult.compressBuffer, compressResult.bitLength);
 
-            int originalLenght = Encoding.UTF8.GetBytes(input).Length;
-            int compressionLenght = compressResult.compressBuffer.Length;
+            // int originalLenght = Encoding.UTF8.GetBytes(input).Length;
+            // int compressionLenght = compressResult.compressBuffer.Length;
 
-            Console.WriteLine($"Compress percentage:{(originalLenght - compressionLenght) / (decimal)originalLenght}");
-            Console.WriteLine($"Data is : {originalData}");
-        }
+            // Console.WriteLine($"Compress percentage:{(originalLenght - compressionLenght) / (decimal)originalLenght}");
+            // Console.WriteLine($"Data is : {Encoding.UTF8.GetString(originalData)}");
+            HuffmanCompression huffman = new HuffmanCompression();
 
-        static Node CreateHuffmanTree(List<Node> nodes){
-
-            if (nodes.Count == 1)
-            {
-                var right = nodes[0];
-                var parentNode = new Node()
-                {
-                    Right = right,
-                    Weight = right.Weight
-                };
-                nodes.Remove(right);
-                nodes.Add(parentNode);
-            }
-
-            while (nodes.Count > 1)
-            {
-                nodes.Sort();
-                var right = nodes[0];
-                var left = nodes[1];
-                var parentNode = new Node(){
-                    Left = left,
-                    Right = right,
-                    Weight = right.Weight + left.Weight
-                };
-                
-                nodes.Remove(left);
-                nodes.Remove(right);
-                nodes.Add(parentNode);
-            }
-
-            return nodes[0];
-        }
-    }
-
-    public class Node : IComparable<Node> {
-        private string code { get; set; } 
-
-        public Node Left { get; set; }
-
-        public char c { get; set; }
-        public Node Right { get; set; }
-        //權值
-        public int Weight { get; set; }
-
-        public Dictionary<char,string> ScanTree(){
-            Dictionary<char,string> encodingMapper = new Dictionary<char, string>();
-            ScanTree(encodingMapper,this);
-            return encodingMapper;
-        }
-
-        private void ScanTree(Dictionary<char,string> encodingMapper,Node node){
-            if (node.c == '\0')
-            {
-                if (node.Left != null)
-                {
-                    node.Left.code = node.code + "0";
-                    ScanTree(encodingMapper, node.Left);
-                }
-                
-                node.Right.code = node.code + "1";
-                ScanTree(encodingMapper,node.Right);
-            }
-            else {
-                encodingMapper.Add(node.c,node.code);
-            }
-        }
-
-        public int CompareTo(Node other)
-        {
-            return this.Weight - other.Weight;
+            huffman.ZipFile(@"C:\Users\Daniel Shih\Desktop\MM.csv",@"C:\Users\Daniel Shih\Desktop\original.zz");
+            huffman.UnZipFile(@"C:\Users\Daniel Shih\Desktop\original.zz",@"C:\Users\Daniel Shih\Desktop\MM_11.csv");
         }
     }
 }
