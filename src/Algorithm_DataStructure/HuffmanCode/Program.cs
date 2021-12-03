@@ -8,7 +8,7 @@ using System.Text;
 namespace Huffman
 {
 
-    class Program
+    sealed class Program
     {
         static void Main(string[] args)
         {
@@ -23,7 +23,7 @@ namespace Huffman
             // Console.WriteLine($"Compress percentage:{(originalLenght - compressionLenght) / (decimal)originalLenght}");
             // Console.WriteLine($"Data is : {Encoding.UTF8.GetString(originalData)}");
 
-            HuffmanCompression huffman = new HuffmanCompression();
+            Compression huffman = new Compression();
             huffman.ZipFile(@"./CompressionSample/Test.bmp",@"./CompressionSample/compressionData");
             huffman.UnZipFile(@"./CompressionSample/compressionData",@"./CompressionSample/new_Test.bmp");
         }

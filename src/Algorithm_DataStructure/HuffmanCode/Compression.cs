@@ -14,7 +14,7 @@ namespace Huffman
         public int CompressionBitLength { get; set; }
     }
 
-    public class HuffmanCompression{
+    public class Compression{
         private Dictionary<byte,string> _huffmanCodes;
         public Node HuffmanTree { get; private set; }
         public (byte[] compressBuffer,int bitLength) Zip(string input)
