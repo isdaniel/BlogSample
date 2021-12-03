@@ -45,9 +45,9 @@ namespace Huffman
                 CompressionBitLength = compressResult.bitLength
             };
 
-            using (Stream stream = new FileStream(desFile , FileMode.Create, FileAccess.Write, FileShare.None))
+            using (Stream stream = new FileStream(desFile , FileMode.Create, FileAccess.Write))
             using (BinaryWriter bw = new BinaryWriter(stream))
-            {
+            {                
                 bw.Write(JsonConvert.SerializeObject(compressInfo));
                 bw.Write(compressResult.compressBuffer);
             }
@@ -55,7 +55,7 @@ namespace Huffman
 
         
         public void UnZipFile(string srcFile,string desFile){
-            using (Stream stream = new FileStream(srcFile , FileMode.Open, FileAccess.Read, FileShare.None))
+            using (Stream stream = new FileStream(srcFile , FileMode.Open, FileAccess.Read))
             using (BinaryReader br = new BinaryReader(stream))
             {          
                 

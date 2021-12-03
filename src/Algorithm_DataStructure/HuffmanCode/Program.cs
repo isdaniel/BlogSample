@@ -22,10 +22,10 @@ namespace Huffman
 
             // Console.WriteLine($"Compress percentage:{(originalLenght - compressionLenght) / (decimal)originalLenght}");
             // Console.WriteLine($"Data is : {Encoding.UTF8.GetString(originalData)}");
-            HuffmanCompression huffman = new HuffmanCompression();
 
-            huffman.ZipFile(@"C:\Users\Daniel Shih\Desktop\MM.csv",@"C:\Users\Daniel Shih\Desktop\original.zz");
-            huffman.UnZipFile(@"C:\Users\Daniel Shih\Desktop\original.zz",@"C:\Users\Daniel Shih\Desktop\MM_11.csv");
+            HuffmanCompression huffman = new HuffmanCompression();
+            huffman.ZipFile(@"./CompressionSample/Test.bmp",@"./CompressionSample/compressionData");
+            huffman.UnZipFile(@"./CompressionSample/compressionData",@"./CompressionSample/new_Test.bmp");
         }
     }
 }
