@@ -18,14 +18,21 @@ namespace AVL_TreeSample
             // bst.RightRotate();
 
             BST bst = new BST(null);
-            int[] arr = new int[]{4,3,6,5,7,8,2,1};
+            int[] arr = new int[]{7,6,10,9,11,8};
             foreach (var item in arr)
             {
-                bst.AddNode(new Node(item + 3));
+                bst.AddNode(new Node(item));
             }
-            bst.AddNode(new Node(3));
-            bst.AddNode(new Node(2));
-            bst.AddNode(new Node(1));
+            bst.AddNode(new Node(12));
+            bst.AddNode(new Node(13));
+            bst.AddNode(new Node(14));
+            bst.AddNode(new Node(15));
+            bst.AddNode(new Node(16));
+            bst.AddNode(new Node(17));
+            bst.AddNode(new Node(18));
+            // bst.AddNode(new Node(3));
+            // bst.AddNode(new Node(2));
+            // bst.AddNode(new Node(1));
             Console.WriteLine("Hello World!");
         }
     }
@@ -97,9 +104,18 @@ namespace AVL_TreeSample
 
             if (pNode.RightHeight()-pNode.LeftHeight() > 1)
             {
+                if (pNode.Right != null && pNode.Right.RightHeight() < pNode.Right.LeftHeight())
+                {
+                    pNode.Right = pNode.Right.RightRotate();
+                }
+
                 pNode = pNode.LeftRotate();
             } else if (pNode.LeftHeight() - pNode.RightHeight() > 1)
             {
+                if (pNode.Left != null && pNode.Left.LeftHeight() < pNode.Left.RightHeight())
+                {
+                    pNode.Left = pNode.Left.LeftRotate();
+                }
                 pNode = pNode.RightRotate();
             }
 
