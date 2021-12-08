@@ -7,12 +7,6 @@ using System.Text;
 using Newtonsoft.Json;
 namespace Huffman
 {
-	
-    public class CompressInfo {
-        public Dictionary<byte,string> HuffmanCodes {get;set;}
-
-        public int CompressionBitLength { get; set; }
-    }
 
     public class Compression{
         private Dictionary<byte,string> _huffmanCodes;

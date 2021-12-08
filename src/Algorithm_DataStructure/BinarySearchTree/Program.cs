@@ -14,28 +14,32 @@ namespace BinarySearchTree
         public Node Search(int value){
             if (this.Value == value)
                 return this;
-            else if (value < this.Value){
-                if (this.Left == null)
+
+            if (this.Value > value)
+            {
+                if (Left == null)
                     return null;
-                return this.Left.Search(value);
-            }
-            else{
-                if (this.Right == null)
+                return Left.Search(value);
+            }else{
+                if (Right == null)
                     return null;
-                return this.Right.Search(value);
+                return Right.Search(value);
             }
+            
         }
 
         public Node SearchParent(int value){
-            if ((this.Left != null && this.Left.Value == value)||
-                (this.Right != null && this.Right.Value == value))
-                return this;
-            
-            if (this.Value > value && this.Left != null)
+            if ((Left != null && Left.Value == value) ||
+                (Right != null && Right.Value == value))
             {
-                return this.Left.SearchParent(value);
-            }else if (this.Value <= value && this.Right != null){
-                return this.Right.SearchParent(value);
+                return this;
+            }
+
+            if (Left != null && this.Value < value)
+            {
+                return Left.SearchParent(value);
+            }else if(Right != null && this.Value >= value){
+                return Right.SearchParent(value);
             }
 
             return null;
@@ -147,18 +151,27 @@ namespace BinarySearchTree
             else {
                 if (targetNode.Left != null)
                 {
-                    if (parnetNode.Left.Value == targetNode.Value)
+                    if (parnetNode != null)
                     {
-                        parnetNode.Left = targetNode.Left;
+                        if (parnetNode.Left.Value == targetNode.Value)
+                        {
+                            parnetNode.Left = targetNode.Left;
+                        }else{
+                            parnetNode.Right = targetNode.Left;
+                        }
                     }else{
-                        parnetNode.Right = targetNode.Left;
+                        _root = targetNode.Left;
                     }
                     
                 }else{
-                    if (parnetNode.Left.Value == targetNode.Value){
-                        parnetNode.Left = targetNode.Right;
+                    if (parnetNode != null){
+                        if (parnetNode.Left.Value == targetNode.Value){
+                            parnetNode.Left = targetNode.Right;
+                        }else{
+                            parnetNode.Right = targetNode.Right;
+                        }
                     }else{
-                        parnetNode.Right = targetNode.Right;
+                        _root = targetNode.Right;
                     }
                 }
             }
@@ -180,7 +193,6 @@ namespace BinarySearchTree
             bst.AddNode(new Node(12));
             bst.AddNode(new Node(2));
 
-            bst.Delete(7);
             bst.Delete(3);
         }
     }
