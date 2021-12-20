@@ -88,7 +88,7 @@ namespace AVL_TreeSample
             _root = Add(_root,node);
         }
 
-        public Node Add(Node pNode,Node node){
+        private Node Add(Node pNode,Node node){
             if (pNode == null){
                 return node;
                 
@@ -186,16 +186,6 @@ namespace AVL_TreeSample
                 }
             }
         }
-
-        // public void RightRotate()
-        // {
-        //     _root = _root.RightRotate();
-        // }
-
-        // public void LeftRotate()
-        // {
-        //     _root = _root.LeftRotate();
-        // }
     }
 
     public class Node {
