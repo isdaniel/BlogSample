@@ -12,13 +12,13 @@
 
 ### How to Use
 
-```
+```cmd
 docker-compose up -d
 ```
 
 跑完之後就會出現 6 台 Redis Container，如下表
 
-```
+```cmd
 $ docker ps
 CONTAINER ID   IMAGE                       COMMAND                  CREATED          STATUS          PORTS                                       NAMES
 1a0c740cbb96   bitnami/redis-cluster:6.2   "/opt/bitnami/script…"   31 seconds ago   Up 27 seconds   0.0.0.0:8105->6379/tcp, :::8105->6379/tcp   rediscluster_redis-node-5_1
