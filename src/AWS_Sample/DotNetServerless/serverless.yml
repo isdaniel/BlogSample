@@ -1,0 +1,18 @@
+service: dotnetServerless
+
+frameworkVersion: '3'
+
+provider:
+  name: aws
+  runtime: dotnet6
+
+package:
+  individually: true
+
+functions:
+  hello:
+    handler: CsharpHandlers::AwsDotnetCsharp.Handler::Hello
+
+    package:
+      artifact: bin/Release/net6.0/hello.zip
+  
