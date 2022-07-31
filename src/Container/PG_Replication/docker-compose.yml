@@ -1,0 +1,28 @@
+version: "2"
+
+services:
+  primary:
+    build: ./publisher
+    container_name: publisher
+    networks:
+      - dockernet
+    ports:
+      - "5432:5432"
+    environment:
+      - "POSTGRES_PASSWORD=guest"
+      - "PGUSER=postgres"
+  replication:
+    build: ./replication
+    container_name: replication
+    networks:
+      - dockernet
+    ports:
+      - "5433:5432"
+    environment:
+      - "POSTGRES_PASSWORD=guest"
+      - "PGUSER=postgres"
+networks:
+  dockernet:
+    driver: bridge
+
+
