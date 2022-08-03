@@ -21,6 +21,16 @@ services:
     environment:
       - "POSTGRES_PASSWORD=guest"
       - "PGUSER=postgres"
+  replication1:
+    build: ./replication
+    container_name: replication1
+    networks:
+      - dockernet
+    ports:
+      - "5434:5432"
+    environment:
+      - "POSTGRES_PASSWORD=guest"
+      - "PGUSER=postgres"    
 networks:
   dockernet:
     driver: bridge
