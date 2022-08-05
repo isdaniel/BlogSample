@@ -13,7 +13,6 @@ SELECT pglogical.create_node(
 SELECT pglogical.replication_set_add_all_tables('default', ARRAY['public']);
 --查看 replication table 資訊
 SELECT * from pglogical.replication_set_table ;
-SELECT * FROM pg_replication_slots;
 SELECT * FROM pglogical.show_subscription_status();
 
 --monitor tables.
@@ -23,3 +22,6 @@ flush_lag：
 replay_lag：
 */
 SELECT * FROM pg_stat_replication;
+SELECT * FROM pg_replication_slots;
+
+--/var/lib/postgresql/
