@@ -29,6 +29,24 @@
 // #define UTILS_H 1 
 // #endif  
 
+static int Add(int val1,int val2){
+    return val1 + val2;
+}
+
+static int Sub(int val1,int val2){
+    return val1 - val2;
+}
+
+static int Mutpl(int val1,int val2){
+    return val1 * val2;
+}
+
+static const VMethods DefaultVMethod ={
+    Add,
+    Sub,
+    Mutpl
+};
+
 int main(void) {
 
 
@@ -37,9 +55,12 @@ int main(void) {
     // int "dst;   
     // printf("%d\r\n",UTILS_H);
     pNode ptr = malloc(sizeof(Node));
-    ptr->flags = 1;
+    ptr->methods = &DefaultVMethod;
+    printf("%d",ptr->methods->add(10,20)); 
 
-    printf("flags : %d\r\n",P_ISLEAF(ptr));
+    //ptr->flags = 1;
+
+    //printf("flags : %d\r\n",P_ISLEAF(ptr));
     // asm ("mov %1, %0\n\t"
     //     "add $1, %0"
     //     : "=r" (dst) 
