@@ -48,7 +48,7 @@ namespace CAS_Lock
     {
         object _lock = new object();
 
-        public int Balance { get; set; }
+        public int Balance;
 
         public void UpdateBalance()
         {
@@ -60,8 +60,12 @@ namespace CAS_Lock
 
         public void UpdateBalanceByInterlock()
         {
-            int val = 0;
-            Balance = Interlocked.Exchange(ref val, Balance -= 10);
+            int val;
+            do
+            {
+                val = Balance;
+            }
+            while (val != Interlocked.CompareExchange(ref Balance, val - 10, val));
         }
     }
 }
