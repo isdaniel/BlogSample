@@ -15,18 +15,16 @@ char* concatStr(char* str1,char* str2){
 
 int main(int argc, char *argv[])
 {
+  int process_inter = 1;
   char* p_read = concatStr("./",argv[1]);
   char* p_write = concatStr("./",argv[2]);
+
   int fd_write = open(p_write, O_WRONLY);
+  write(fd_write, &process_inter, sizeof(int));
+  printf("wirte fin!\r\n");
+  int fd_read = open(p_read , O_RDONLY);
   printf("read: %s, write %s \r\n",p_read,p_write);
-  int fd_read = open(p_read, O_RDONLY);
-  int process_inter = 1;
   int i = 0;
-  if (fd_read < 0 || fd_write < 0)
-  {
-    printf("open failed \r\n");
-    return -1;
-  }
 
   do
   {

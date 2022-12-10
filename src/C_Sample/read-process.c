@@ -6,18 +6,13 @@
 
 int main(void) {
     int fd;
-    fd = open("",O_RDONLY);
+    fd = open("./pipe2",O_RDONLY);
     int process_inter=0;
     if(fd < 0){
       printf("open failed \r\n");
       return -1;
     }
-    for (int i = 0; i < 5; i++)
-    {
-      printf("this is first process i = %d \r\n",i);
-      usleep(100);
-    }
-    process_inter = 1;
-    write(fd,&process_inter,1 );
+    read(fd, &process_inter, sizeof(int));
+    printf("process_inter = %d\r\n",process_inter);
     return 0;
 }
