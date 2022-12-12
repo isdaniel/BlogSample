@@ -12,10 +12,10 @@ struct msgModel
     char ID[4];
 };
 
-
 int main()
 {
-    int msgid = msgget(IPC_PRIVATE,0777);
+    key_t key = ftok("./key",0);
+    int msgid = msgget(key, 0666 | IPC_CREAT);
     struct msgModel sendbuf;
     if (msgid < 0)
     {
@@ -29,6 +29,6 @@ int main()
         fgets(sendbuf.buffer,sizeof(sendbuf.buffer),stdin);
         msgsnd(msgid,(void*)&sendbuf,strlen(sendbuf.buffer),0);
     }
-    
+
     return 0;
 }
