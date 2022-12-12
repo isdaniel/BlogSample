@@ -2,8 +2,11 @@
 #include <sys/ipc.h>
 #include <sys/shm.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <signal.h>
 #include <string.h>
+#include <sys/msg.h>
+#include <unistd.h>
 
 struct msgModel
 {
@@ -16,16 +19,16 @@ int main(int argc, char *argv[])
 {
     key_t key = ftok("./key",0);
     int msgid = msgget(key,0666 | IPC_CREAT);
+    struct msgModel sendbuf,recvbuf;
     long sendId = atol(argv[1]);
     long recvId = atol(argv[2]);
     int dataLen;
-    printf("begin received data! sendId =%d , recvId =%d , key = %d \r\n",sendId,recvId,key);
-    
+    printf("begin received data! sendId =%ld ,msgid = %d, recvId =%ld , key = %d \r\n",sendId,msgid,recvId,key);
+    sendbuf.type = sendId;
     int pid = fork();
 
     //child process
     if(pid == 0){
-        struct msgModel recvbuf;
         do
         {
             memset(recvbuf.buffer,0,sizeof(recvbuf.buffer));
@@ -37,13 +40,13 @@ int main(int argc, char *argv[])
     //parent process
     if (pid > 0)
     {
-        struct msgModel sendbuf;
-        sendbuf.type = sendId;
         while (1)
         {
+            //sleep(1000);
+            memset(sendbuf.buffer,0,sizeof(sendbuf.buffer));
+            printf("please input message:\r\n");
             fgets(sendbuf.buffer,sizeof(sendbuf.buffer),stdin);
             msgsnd(msgid,(void*)&sendbuf,strlen(sendbuf.buffer),0);
-            printf("send message %s\r\n",sendbuf.buffer);
         }
     }
     
