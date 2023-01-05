@@ -19,19 +19,21 @@ void* myfunc(void* args){
 }
 
 int main(void) {
-    http_Context context_array[N];
+    http_Context* context_ptr = malloc(N * sizeof(http_Context));
     for (size_t i = 0; i < N; i++)
     {
-        context_array[i].id = i;
-        pthread_create(&context_array[i].tid,NULL,myfunc,&context_array[i]);
+        (context_ptr + i)->id = i;
+        int ret = pthread_create(&((context_ptr + i)->tid),NULL,myfunc,(context_ptr + i));
+        if (ret != 0) {
+            fprintf(stderr, "Error creating thread: %d\n", ret);
+        }
     }
 
     for (size_t i = 0; i < N; i++)
     {
-        pthread_join(context_array[i].tid,NULL);
+        pthread_join((context_ptr + i)->tid,NULL);
     }
     
-
-
+    free(context_ptr);
     return 0;
 }
