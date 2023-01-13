@@ -20,8 +20,6 @@ dev_t dev_num;
 
 int device_open(struct inode *inode,struct file *filp){
         if(down_interruptible(&virtual_device.sem)!=0){
-
-
                 return -1;
         }
 
