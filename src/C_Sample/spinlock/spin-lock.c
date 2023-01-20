@@ -5,11 +5,15 @@ int lock = 0;
 
 void *thread_func(void* arg)
 {
+    printf("start thread_func %d lock val:%d\n",*((int*)arg),lock);
+    
     // Try to acquire the lock
-    while (__sync_lock_test_and_set(&lock, 1));
+    while (__sync_lock_test_and_set(&lock, 1)){
+        printf("arg : %d, wait for spinlock: %d \r\n",*((int*)arg),lock);
+    }
 
     // Critical section
-    printf("Inside critical section %d \n",*((int*)arg));
+    printf("Inside critical section %d, get lock %d \n",*((int*)arg),lock);
 
     // Release the lock
     __sync_lock_release(&lock);
