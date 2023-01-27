@@ -11,6 +11,21 @@
 // #define DOUBLEALIGN(LEN)		TYPEALIGN(ALIGNOF_DOUBLE, (LEN))
 #define MAXALIGN(LEN)			TYPEALIGN(MAXIMUM_ALIGNOF, (LEN))
 
+struct device_context
+{
+    int major;
+    int minor;
+    char* dev_name;
+    unsigned dev_cnt;
+};
+struct device_context dev_instance;
+
+int register_chrdevice(struct device_context* context){
+    int ret = 0;
+    (*context).dev_cnt = 100;
+    (*context).dev_name = "Hello dev_instance!!";
+    return ret;
+}
 
 #define BTP_LEAF		(1 << 0)	/* leaf page, i.e. not internal page */
 #define BTP_ROOT		(1 << 1)	/* root page (has no parent) */
@@ -49,14 +64,16 @@ static const VMethods DefaultVMethod ={
 
 int main(void) {
 
-
+    register_chrdevice(&dev_instance);
+    printf("dev_instance.dev_name %s, dev_instance.dev_cnt %d\n",dev_instance.dev_name,dev_instance.dev_cnt);
+    printf("%p\n",&dev_instance);
     //printf("%d  %d",MAXALIGN(sizeof(Node)),sizeof(pNode));
     // int src = 1;
     // int "dst;   
     // printf("%d\r\n",UTILS_H);
-    pNode ptr = malloc(sizeof(Node));
-    ptr->methods = &DefaultVMethod;
-    printf("%d",ptr->methods->add(10,20)); 
+    // pNode ptr = malloc(sizeof(Node));
+    // ptr->methods = &DefaultVMethod;
+    // printf("%d",ptr->methods->add(10,20)); 
 
     //ptr->flags = 1;
 

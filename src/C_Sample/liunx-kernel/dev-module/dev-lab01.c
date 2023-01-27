@@ -6,20 +6,82 @@
 #include <linux/device.h>
 #include <linux/semaphore.h>
 #include <linux/uaccess.h>
+#include <linux/slab.h>
+// #include "device-library.h"
 
-#define DEV_NAME "dev-lab01"
-#define DEV_COUNT 1
-
-struct lab01_dev{
-    struct cdev cdev;
+typedef struct device_context
+{
     dev_t devid;
-    int major;        
-    int minor;       
-    struct device* device; 
-    struct class* class;
-};
+    int major;
+    int minor;
+    char* dev_name;
+    unsigned dev_cnt;
+    struct cdev cdev;
+    struct device *device;
+    struct class *class;
+    struct module *owner;
+    int sn;
+} device_context;
 
-struct lab01_dev dev_instance;
+static int register_chrdevice(device_context* dev_context)
+{
+    int ret = 0;
+    if (dev_context->major)
+    {
+        // 向系統申請一個設備號,產生 device Id
+        dev_context->devid = MKDEV(dev_context->major, 0);
+        ret = register_chrdev_region(dev_context->devid, dev_context->dev_cnt, dev_context->dev_name);
+    }
+    else
+    {
+        ret = alloc_chrdev_region(&dev_context->devid, 0,dev_context->dev_cnt, dev_context->dev_name);
+        dev_context->major = MAJOR(dev_context->devid);
+        dev_context->minor = MINOR(dev_context->devid);
+    }
+    dev_context->cdev.owner = dev_context->owner;
+    return ret;
+}
+
+static int init_character_driver(device_context* dev_context,struct file_operations* fops){
+    int ret = 0;
+
+    cdev_init(&dev_context->cdev,fops);
+    //初始化完畢 character driver 需要透過 cdev_add 添加到 liunx kernel 中.
+    ret = cdev_add(&dev_context->cdev,dev_context->devid ,dev_context->dev_cnt);
+    printk("device majorId =%d, minorId =%d \r\n",dev_context->major,
+    dev_context->minor);
+
+    return ret;
+}
+
+static int init_device_node(device_context* dev_context)
+{
+    dev_context->class = class_create(dev_context->owner,dev_context->dev_name);
+    if(IS_ERR(dev_context->class)){
+        return PTR_ERR(dev_context->class);
+    }
+
+    dev_context->device = device_create(dev_context->class,NULL,dev_context->devid,NULL,dev_context->dev_name);
+    if(IS_ERR(dev_context->device)){
+        return PTR_ERR(dev_context->device);
+    }
+
+    return 0;
+}
+
+static void realse_chardriver_resource(device_context* dev_context){
+    cdev_del(&dev_context->cdev);
+
+    //unregister_chrdev(DEV_MAJOR, DEV_NAME);
+    unregister_chrdev_region(dev_context->devid,dev_context->dev_cnt);
+
+    /* firstly release device */
+    device_destroy(dev_context->class,dev_context->devid);
+    /* secondly release class */
+    class_destroy(dev_context->class);
+}
+
+device_context dev_context;
 int ret;
 char data[100];
 
@@ -28,7 +90,6 @@ lab01_read(struct file* filp, char* buffer, size_t count, loff_t* ppos)
 {
 
     printk("lab01_read\r\n");
-
     ret = copy_to_user(buffer,data,count);
     return 0;
 }
@@ -68,40 +129,24 @@ static int driver_entry(void)
     //手動指定 major 驅動編號和 file_operations
     //int ret = register_chrdev(DEV_MAJOR, DEV_NAME,&fops);
 
-    printk(KERN_INFO "dev-lab01: inin module\n");
+    printk(KERN_INFO "dev-lab01: inin module, dev_instance pos:%p\n",&dev_context);
     //有指定 majorid
-    if(dev_instance.major){
-        //向系統申請一個設備號,產生 device Id
-        dev_instance.devid = MKDEV(dev_instance.major,0);
-        ret = register_chrdev_region(dev_instance.devid,DEV_COUNT,DEV_NAME);
-    } else {
-        ret = alloc_chrdev_region(&dev_instance.devid,0,DEV_COUNT,DEV_NAME);
-        dev_instance.major = MAJOR(dev_instance.devid);
-        dev_instance.minor = MINOR(dev_instance.devid);
-    }
+    dev_context.dev_name = "dev-lab01";
+    dev_context.dev_cnt = 1;
+    dev_context.owner = THIS_MODULE;
+    ret = register_chrdevice(&dev_context);
     
     if(ret < 0){
         printk("dev-lab01 init failed\r\n");
         return -1;
     }
-    
-    dev_instance.cdev.owner = THIS_MODULE;
-    cdev_init(&dev_instance.cdev,&fops);
-    //初始化完畢 cdev 需要透過 cdev_add 添加到 liunx kernel 中.
-    ret = cdev_add(&dev_instance.cdev,dev_instance.devid ,DEV_COUNT);
-    printk("device majorId =%d, minorId =%d \r\n",dev_instance.major,
-    dev_instance.minor);
-    //printk(KERN_INFO "\t use mknod /dev/%s c %d %d  command for device file\n",DEV_NAME, dev_instance.major,dev_instance.minor);
+    ret = init_character_driver(&dev_context,&fops);
     
     /*自動建立設備節點 mknod*/
-    dev_instance.class = class_create(THIS_MODULE,DEV_NAME);
-    if(IS_ERR(dev_instance.class)){
-        return PTR_ERR(dev_instance.class);
-    }
-
-    dev_instance.device = device_create(dev_instance.class,NULL,dev_instance.devid,NULL,DEV_NAME);
-    if(IS_ERR(dev_instance.device)){
-        return PTR_ERR(dev_instance.device);
+    ret = init_device_node(&dev_context);
+    if(ret != 0){
+         printk(KERN_ERR "init_device_node failed\r\n");
+         return ret;
     }
 
     return 0;
@@ -109,15 +154,7 @@ static int driver_entry(void)
 
 static void driver_exit(void)
 {
-    cdev_del(&dev_instance.cdev);
-
-    //unregister_chrdev(DEV_MAJOR, DEV_NAME);
-    unregister_chrdev_region(dev_instance.devid,DEV_COUNT);
-
-    /* firstly release device */
-    device_destroy(dev_instance.class,dev_instance.devid);
-    /* secondly release class */
-    class_destroy(dev_instance.class);
+    realse_chardriver_resource(&dev_context);
     printk(KERN_INFO "dev-lab01: unloaded module\n");
 }
 
