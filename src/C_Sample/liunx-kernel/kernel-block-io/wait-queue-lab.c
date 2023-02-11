@@ -8,6 +8,7 @@
 #include <linux/uaccess.h>
 #include <linux/slab.h>
 #include <linux/timer.h>
+#include <linux/wait.h>
 
 #define TIMER_FREQ(period) jiffies + msecs_to_jiffies(period)
 #define RUNNING 1
@@ -35,9 +36,10 @@ void GetIntrTimerCallback(struct timer_list *t)
     io_device *dev_context = from_timer(dev_context, t, timer);
     int flag = atomic_read(&dev_context->flag);
     if(flag){
-        //wake_up_interruptible(&dev->r_wait);
-        /* wake_up(&dev->r_wait); */
+        printk(KERN_INFO "wake up dev_context->r_wait !!\r\n");
+        //wake_up(&dev_context->r_wait); 
         atomic_set(&dev_context->flag,STOP);
+        wake_up_interruptible(&dev_context->r_wait);
     } else {
         atomic_set(&dev_context->flag,RUNNING);
     }
@@ -120,14 +122,36 @@ timer_read(struct file *filp, char *buffer, size_t count, loff_t *ppos)
     io_device* dev =(io_device*) filp->private_data;
     unsigned char flag = atomic_read(&dev->flag);
     //printk("block-lab_read\r\n");
-
-    //ret = wait_event_interruptible(dev->r_wait, atomic_read(&dev->flag)); 
-    // if (ret) {
-	// 	//goto wait_error;
-	// } 
-
+    #if 0
+    ret = wait_event_interruptible(dev->r_wait, atomic_read(&dev->flag));
+    if(ret){
+        return -ERESTARTSYS;
+    }
+    #endif
+    //printk("block-lab_read\r\n");
+    if(atomic_read(&dev->flag) == STOP){
+        return -ERESTARTSYS;
+    }
+    
+    DECLARE_WAITQUEUE(wait, current);
+    add_wait_queue(&dev->r_wait, &wait);	
+    __set_current_state(TASK_INTERRUPTIBLE);
+    schedule();							
+    if(signal_pending(current))	{			
+        ret = -ERESTARTSYS;
+        goto wait_error;
+    }
+    __set_current_state(TASK_RUNNING);      
+    remove_wait_queue(&dev->r_wait, &wait);   
+    atomic_set(&dev->flag,STOP);
     ret = copy_to_user(buffer, &flag,sizeof(flag));
+    
     return 0;
+
+wait_error:
+ 	set_current_state(TASK_RUNNING);		
+ 	remove_wait_queue(&dev->r_wait, &wait);	
+	return ret;
 }
 
 ssize_t
@@ -226,6 +250,7 @@ static int driver_entry(void)
     dev_context.timer.expires = TIMER_FREQ(dev_context.period);
     add_timer(&dev_context.timer);
 
+    init_waitqueue_head(&dev_context.r_wait);
     
     // init_timer(&timerdev->timer);
     // timerdev->timer.function = timer_func;
