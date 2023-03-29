@@ -17,11 +17,15 @@ typedef struct
 
 int main(void) {
     printf("Hello \r\n");
-    StructBase* base1 = malloc(sizeof(Structchild));
+    StructBase* base1 = malloc(sizeof(StructBase));
     base1->id = 1000;
     base1->str = "Hello StructBase!!";
     Structchild* child = (Structchild*)base1;
     child->val = 111;
+    printf("base1->id : %d,  child->val %d ,  base1->str %s  \r\n",child->header.id,child->val, base1->str);
+    Structchild* child2 = child; 
+    child->val = 0;
+    child->header.id = 0;
     printf("base1->id : %d,  child->val %d ,  base1->str %s  \r\n",child->header.id,child->val, base1->str);
     return 0;
 }
