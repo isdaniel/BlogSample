@@ -1,6 +1,15 @@
 TARGET = 1
 
-all: Non scope-modify
+all: Non scope-modify bear-zoo elephant-zoo
+
+%-zoo: TARGET=50
+
+bear-zoo:
+	@echo "bear-zoo TARGET : $(TARGET)"
+
+elephant-zoo: TARGET += 1
+elephant-zoo: 
+	@echo "elephant-zoo TARGET : $(TARGET)"
 
 Non:
 	@echo "Non TARGET : $(TARGET)"
