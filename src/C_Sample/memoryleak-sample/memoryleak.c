@@ -39,6 +39,8 @@ void _free(void* ptr,const char* filename,int line,const char* datetime){
 #endif
 
 // dlsym, dlopen, second way hock
+// overwite hoock
+#ifdef HOOK
 typedef void* (*malloc_t)(size_t size);
 typedef void (*free_t)(void* ptr);
 
@@ -80,6 +82,8 @@ void* malloc(size_t size){
     return ptr;
 }
 
+//bpf can detech whether memory leak
+
 void free(void* ptr){
     if(enable_free_hook){
         enable_free_hook = 0;
@@ -95,10 +99,14 @@ void free(void* ptr){
         free_f(ptr);
     }
 }
+#endif
 
-
+//bpftrace {filename}
 int main(void) {
+    #ifdef HOOK
     init_hook();
+    #endif
+    
     int* p1 = (int*)malloc(1);
     int* p2 = (int*)malloc(2);
     int* p3 = (int*)malloc(sizeof(int));
