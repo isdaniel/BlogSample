@@ -1,0 +1,24 @@
+
+uprobe:/lib/x86_64-linux-gnu/libc.so.6:malloc
+/comm == "memoryleak"/
+{
+    printf("malloc size:%d\n",arg0);
+    @size = arg0;
+}
+
+uretprobe:/lib/x86_64-linux-gnu/libc.so.6:malloc
+/comm == "memoryleak"/
+{
+    printf("addr=%p\n",retval);
+    @mem[retval] = @size;
+}
+
+
+uprobe:/lib/x86_64-linux-gnu/libc.so.6:free
+/comm == "memoryleak"/
+{
+    printf("free addr=%p\n",arg0);
+    delete(@mem[arg0]);
+}
+
+
