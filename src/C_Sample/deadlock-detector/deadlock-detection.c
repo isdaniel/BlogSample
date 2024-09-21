@@ -63,7 +63,7 @@ void add_vertex(struct source_type type)
 		tg->num++;
 	}
 }
-int add_edge(struct source_type from, struct source_type to)
+void add_edge(struct source_type from, struct source_type to)
 {
 	add_vertex(from);
 	add_vertex(to);
@@ -92,7 +92,7 @@ int verify_edge(struct source_type i, struct source_type j)
 	}
 	return 0;
 }
-int remove_edge(struct source_type from, struct source_type to)
+void remove_edge(struct source_type from, struct source_type to)
 {
 	int idxi = search_vertex(from);
 	int idxj = search_vertex(to);
@@ -146,7 +146,7 @@ int DFS(int idx)
 	return 1;
 }
 
-int search_for_cycle(int idx)
+void search_for_cycle(int idx)
 {
 	struct vertex *ver = &tg->list[idx];
 	visited[idx] = 1;
@@ -187,7 +187,7 @@ void check_dead_lock(void)
 	}
 }
 
-static void *thread_routine(void *args)
+static void* thread_routine(void *args)
 {
 	while (1)
 	{
@@ -205,6 +205,8 @@ static void *thread_routine(void *args)
 			}
 		}
 	}
+
+	return NULL;
 }
 
 void start_check(void)
@@ -341,6 +343,7 @@ int pthread_mutex_lock(pthread_mutex_t *mutex)
 	lock_before(selfid, (uint64)mutex);
 	pthread_mutex_lock_f(mutex);
 	lock_after(selfid, (uint64)mutex);
+	return 0;
 }
 
 int pthread_mutex_unlock(pthread_mutex_t *mutex)
@@ -348,9 +351,10 @@ int pthread_mutex_unlock(pthread_mutex_t *mutex)
 	pthread_t selfid = pthread_self();
 	pthread_mutex_unlock_f(mutex);
 	unlock_after(selfid, (uint64)mutex);
+	return 0;
 }
 
-int init_hook()
+void init_hook()
 {
 	pthread_mutex_lock_f = dlsym(RTLD_NEXT, "pthread_mutex_lock");
 	pthread_mutex_unlock_f = dlsym(RTLD_NEXT, "pthread_mutex_unlock");
