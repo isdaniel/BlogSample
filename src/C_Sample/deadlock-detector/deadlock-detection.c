@@ -5,27 +5,27 @@ enum Type
 	PROCESS,
 	RESOURCE
 };
-struct source_type
+
+struct source_node
 {
 	uint64 id;
 	enum Type type;
-	uint64 lock_id;
+	uint64 lock_id; //mutex address
 	int degress;
 };
 
 struct vertex
 {
-	struct source_type s;
+	struct source_node node;
 	struct vertex *next;
 };
 
 struct task_graph
 {
 	struct vertex list[MAX];
-	struct source_type locklist[MAX];
+	struct source_node locklist[MAX];
 	int num;
 	int lockidx;
-	pthread_mutex_t mutex;
 };
 
 struct task_graph *tg = NULL;
@@ -34,36 +34,47 @@ int visited[MAX];
 int k = 0;
 int deadlock = 0;
 
-struct vertex *create_vertex(struct source_type type)
+
+int inc_atomic(int *value, int add)
+{
+	int old;
+	__asm__ volatile(
+		"lock;xaddl %2, %1;"
+		: "=a"(old)
+		: "m"(*value), "a"(add)
+		: "cc", "memory");
+	return old;
+}
+
+struct vertex *create_vertex(struct source_node node)
 {
 	struct vertex *tex = (struct vertex *)malloc(sizeof(struct vertex));
-	tex->s = type;
+	tex->node = node;
 	tex->next = NULL;
 	return tex;
 }
 
-int search_vertex(struct source_type type)
+int search_vertex(struct source_node node)
 {
-	int i = 0;
-	for (i = 0; i < tg->num; i++)
+	for (int i = 0; i < tg->num; i++)
 	{
-		if (tg->list[i].s.type == type.type && tg->list[i].s.id == type.id)
+		if (tg->list[i].node.type == node.type && tg->list[i].node.id == node.id)
 		{
 			return i;
 		}
 	}
 	return -1;
 }
-void add_vertex(struct source_type type)
+void add_vertex(struct source_node type)
 {
 	if (search_vertex(type) == -1)
 	{
-		tg->list[tg->num].s = type;
+		tg->list[tg->num].node = type;
 		tg->list[tg->num].next = NULL;
-		tg->num++;
+		inc_atomic(&tg->num, 1);
 	}
 }
-void add_edge(struct source_type from, struct source_type to)
+void add_edge(struct source_node from, struct source_node to)
 {
 	add_vertex(from);
 	add_vertex(to);
@@ -74,7 +85,8 @@ void add_edge(struct source_type from, struct source_type to)
 	}
 	v->next = create_vertex(to);
 }
-int verify_edge(struct source_type i, struct source_type j)
+
+int verify_edge(struct source_node i, struct source_node j)
 {
 	if (tg->num == 0)
 		return 0;
@@ -86,13 +98,13 @@ int verify_edge(struct source_type i, struct source_type j)
 	struct vertex *v = &(tg->list[idx]);
 	while (v != NULL)
 	{
-		if (v->s.id == j.id)
+		if (v->node.id == j.id)
 			return 1;
 		v = v->next;
 	}
 	return 0;
 }
-void remove_edge(struct source_type from, struct source_type to)
+void remove_edge(struct source_node from, struct source_node to)
 {
 	int idxi = search_vertex(from);
 	int idxj = search_vertex(to);
@@ -102,7 +114,7 @@ void remove_edge(struct source_type from, struct source_type to)
 		struct vertex *remove;
 		while (v->next != NULL)
 		{
-			if (v->next->s.id == to.id)
+			if (v->next->node.id == to.id)
 			{
 				remove = v->next;
 				v->next = v->next->next;
@@ -120,9 +132,9 @@ void print_deadlock(void)
 	printf("deadlock : ");
 	for (i = 0; i < k - 1; i++)
 	{
-		printf("%ld --> ", tg->list[path[i]].s.id);
+		printf("%ld --> ", tg->list[path[i]].node.id);
 	}
-	printf("%ld\n", tg->list[path[i]].s.id);
+	printf("%ld\n", tg->list[path[i]].node.id);
 }
 
 int DFS(int idx)
@@ -139,7 +151,7 @@ int DFS(int idx)
 	path[k++] = idx;
 	while (ver->next != NULL)
 	{
-		DFS(search_vertex(ver->next->s));
+		DFS(search_vertex(ver->next->node));
 		k--;
 		ver = ver->next;
 	}
@@ -166,7 +178,7 @@ void search_for_cycle(int idx)
 			path[i] = -1;
 		}
 		k = 1;
-		DFS(search_vertex(ver->next->s));
+		DFS(search_vertex(ver->next->node));
 		ver = ver->next;
 	}
 }
@@ -187,7 +199,7 @@ void check_dead_lock(void)
 	}
 }
 
-static void* thread_routine(void *args)
+static void *thread_routine(void *args)
 {
 	while (1)
 	{
@@ -196,8 +208,10 @@ static void* thread_routine(void *args)
 		// break deadlock
 		if (deadlock == 1)
 		{
-			for(int i = 0 ; i<MAX; i++){
-				if(path[i] == 1){
+			for (int i = 0; i < MAX; i++)
+			{
+				if (path[i] == 1)
+				{
 					pthread_t tid = tg->locklist[i].id;
 					printf("deadlock detected, kill tid = %ld\r\n", tid);
 					pthread_kill(tid, SIGINT);
@@ -208,6 +222,8 @@ static void* thread_routine(void *args)
 
 	return NULL;
 }
+
+
 
 void start_check(void)
 {
@@ -220,8 +236,7 @@ void start_check(void)
 
 int search_lock(uint64 lock)
 {
-	int i = 0;
-	for (i = 0; i < tg->lockidx; i++)
+	for (int i = 0; i < tg->lockidx; i++)
 	{
 		if (tg->locklist[i].lock_id == lock)
 		{
@@ -233,8 +248,7 @@ int search_lock(uint64 lock)
 
 int search_empty_lock(uint64 lock)
 {
-	int i = 0;
-	for (i = 0; i < tg->lockidx; i++)
+	for (int i = 0; i < tg->lockidx; i++)
 	{
 		if (tg->locklist[i].lock_id == 0)
 		{
@@ -244,23 +258,11 @@ int search_empty_lock(uint64 lock)
 	return tg->lockidx;
 }
 
-int inc(int *value, int add)
-{
-	int old;
-	__asm__ volatile(
-		"lock;xaddl %2, %1;"
-		: "=a"(old)
-		: "m"(*value), "a"(add)
-		: "cc", "memory");
-	return old;
-}
-
 void print_locklist(void)
 {
-	int i = 0;
 	printf("print_locklist: \n");
 	printf("---------------------\n");
-	for (i = 0; i < tg->lockidx; i++)
+	for (int i = 0; i < tg->lockidx; i++)
 	{
 		printf("threadid : %ld, lockid: %ld\n", tg->locklist[i].id, tg->locklist[i].lock_id);
 	}
@@ -269,17 +271,16 @@ void print_locklist(void)
 
 void lock_before(uint64 thread_id, uint64 lockaddr)
 {
-	int idx = 0;
 	// list<threadid, toThreadid>
-	for (idx = 0; idx < tg->lockidx; idx++)
+	for (int idx = 0; idx < tg->lockidx; idx++)
 	{
 		if ((tg->locklist[idx].lock_id == lockaddr))
 		{
-			struct source_type from;
+			struct source_node from;
 			from.id = thread_id;
 			from.type = PROCESS;
 			add_vertex(from);
-			struct source_type to;
+			struct source_node to;
 			to.id = tg->locklist[idx].id;
 			tg->locklist[idx].degress++;
 			to.type = PROCESS;
@@ -297,20 +298,20 @@ void lock_after(uint64 thread_id, uint64 lockaddr)
 {
 	int idx = 0;
 	if (-1 == (idx = search_lock(lockaddr)))
-	{ // lock list opera
+	{ 
 		int eidx = search_empty_lock(lockaddr);
 
 		tg->locklist[eidx].id = thread_id;
 		tg->locklist[eidx].lock_id = lockaddr;
 
-		inc(&tg->lockidx, 1);
+		inc_atomic(&tg->lockidx, 1);
 	}
 	else
 	{
-		struct source_type from;
+		struct source_node from;
 		from.id = thread_id;
 		from.type = PROCESS;
-		struct source_type to;
+		struct source_node to;
 		to.id = tg->locklist[idx].id;
 		tg->locklist[idx].degress--;
 		to.type = PROCESS;
@@ -326,7 +327,8 @@ void unlock_after(uint64 thread_id, uint64 lockaddr)
 	{
 		tg->locklist[idx].id = 0;
 		tg->locklist[idx].lock_id = 0;
-		// inc(&tg->lockidx, -1);
+		inc_atomic(&tg->lockidx, -1);
+		inc_atomic(&tg->num, -1);
 	}
 }
 
@@ -334,7 +336,6 @@ typedef int (*pthread_mutex_lock_t)(pthread_mutex_t *mutex);
 pthread_mutex_lock_t pthread_mutex_lock_f;
 typedef int (*pthread_mutex_unlock_t)(pthread_mutex_t *mutex);
 pthread_mutex_unlock_t pthread_mutex_unlock_f;
-
 
 int pthread_mutex_lock(pthread_mutex_t *mutex)
 {

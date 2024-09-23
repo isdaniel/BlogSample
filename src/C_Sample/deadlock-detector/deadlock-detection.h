@@ -10,8 +10,7 @@
 #include <stdint.h>
 #include <signal.h>
 
-#define THREAD_NUM 64
-#define MAX 100
+#define MAX 64
 typedef unsigned long int uint64;
 
 void init_hook();
