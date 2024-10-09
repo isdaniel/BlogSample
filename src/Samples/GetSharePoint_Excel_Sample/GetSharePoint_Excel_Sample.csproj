@@ -13,7 +13,7 @@
     <PackageReference Include="Microsoft.Graph" Version="4.14.0" />
     <PackageReference Include="Microsoft.Identity.Web.Certificate" Version="1.25.0" />
     <PackageReference Include="Microsoft.Identity.Web.TokenCache" Version="1.25.0" />
-    <PackageReference Include="System.Text.Json" Version="8.0.4" />
+    <PackageReference Include="System.Text.Json" Version="8.0.5" />
   </ItemGroup>
 
 </Project>
