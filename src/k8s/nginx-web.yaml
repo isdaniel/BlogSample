@@ -21,13 +21,9 @@ spec:
       containers:
         - name: statefulset-azurefile
           image: mcr.microsoft.com/oss/nginx/nginx:1.19.5
-          command:
-            - "/bin/bash"
-            - "-c"
-            - set -euo pipefail; while true; do echo $(date) >> /mnt/azurefile/outfile; sleep 1; done
           volumeMounts:
             - name: web-persistent-volume
-              mountPath: /mnt/azurefile
+              mountPath: /usr/share/nginx/html
       volumes: 
         - name: web-persistent-volume
           persistentVolumeClaim:
