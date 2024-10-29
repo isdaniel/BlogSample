@@ -1,0 +1,33 @@
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  annotations:
+    pv.kubernetes.io/provisioned-by: disk.csi.azure.com
+  name: pv-azurefile
+spec:
+  capacity:
+    storage: 10Gi
+  accessModes:
+    - ReadWriteOnce
+  persistentVolumeReclaimPolicy: Retain  # if set as "Delete" file share would be removed in pvc deletion
+  storageClassName: azurefile-csi
+  # mountOptions:
+  #   - dir_mode=0777
+  #   - file_mode=0777
+  #   - uid=0
+  #   - gid=0
+  #   - mfsymlinks
+  #   - cache=strict  # https://linux.die.net/man/8/mount.cifs
+  #   - nosharesock  # reduce probability of reconnect race
+  #   - actimeo=30  # reduce latency for metadata-heavy workload
+  #   - nobrl  # disable sending byte range lock requests to the server and for applications which have challenges with posix locks
+  csi:
+    driver: disk.csi.azure.com
+    # make sure volumeid is unique for every identical share in the cluster
+    volumeHandle: {azure-disk-uri}
+    volumeAttributes:
+      fsType: ext4
+    # nodeStageSecretRef:
+    #   name: azure-secret
+    #   namespace: default
+
