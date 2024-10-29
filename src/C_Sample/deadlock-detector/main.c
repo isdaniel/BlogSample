@@ -11,7 +11,6 @@ void *thread_rountine_1(void *args)
 {
 	pthread_t selfid = pthread_self(); //
 	printf("thread_routine 1 : %ld \n", selfid);
-
 	pthread_mutex_lock(&mutex_1);
 	sleep(1);
 	pthread_mutex_lock(&mutex_2);
@@ -73,5 +72,7 @@ int main()
 	pthread_join(tid2, NULL);
 	pthread_join(tid3, NULL);
 	pthread_join(tid4, NULL);
+
+	//getchar();
 	return 0;
 }

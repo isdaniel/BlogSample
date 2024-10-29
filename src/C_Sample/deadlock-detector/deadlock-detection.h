@@ -10,11 +10,10 @@
 #include <stdint.h>
 #include <signal.h>
 
-#define THREAD_NUM 64
-#define MAX 100
+#define MAX 64
 typedef unsigned long int uint64;
 
-int init_hook();
+void init_hook();
 void start_check(void);
 int pthread_mutex_lock(pthread_mutex_t *mutex);
 int pthread_mutex_unlock(pthread_mutex_t *mutex);
