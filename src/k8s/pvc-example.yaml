@@ -9,7 +9,6 @@ spec:
   resources:
     requests:
       storage: 10Gi
-  storageClassName: azurefile-csi
   # 也可以用選擇器來指定要使用的 PV
   # selector:
   #   matchLabels:

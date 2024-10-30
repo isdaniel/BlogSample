@@ -28,17 +28,34 @@ spec:
         - name: web-persistent-volume
           persistentVolumeClaim:
             claimName: pvc-azurefile
-  # updateStrategy:
-  #   type: RollingUpdate
-  # selector:
-  #   matchLabels:
-  #     app: nginx
-  # volumeClaimTemplates:
-  #   - metadata:
-  #       name: persistent-storage
-  #     spec:
-  #       storageClassName: azurefile-csi-nfs
-  #       accessModes: ["ReadWriteMany"]
-  #       resources:
-  #         requests:
-  #           storage: 8Gi
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: statefulset-azurefile-sc
+  labels:
+    app: nginx
+spec:
+  podManagementPolicy: Parallel  # default is OrderedReady
+  serviceName: statefulset-azurefile-sc
+  replicas: 1
+  selector:
+    matchLabels:
+      app: nginx  # Ensures that selector and template labels match
+  template:
+    metadata:
+      labels:
+        app: nginx
+    spec:
+      # nodeSelector:
+      #   "kubernetes.io/os": linux
+      containers:
+        - name: statefulset-azurefile-sc
+          image: mcr.microsoft.com/oss/nginx/nginx:1.19.5
+          volumeMounts:
+            - name: web-persistent-volume
+              mountPath: /usr/share/nginx/html
+      volumes: 
+        - name: web-persistent-volume
+          persistentVolumeClaim:
+            claimName: my-sc-pvc
