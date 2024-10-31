@@ -8,3 +8,15 @@ volumeBindingMode: Immediate
 allowVolumeExpansion: true
 parameters:
   skuName: Standard_LRS
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: my-sc-pvc
+spec:
+  accessModes:
+    - ReadWriteMany 
+  storageClassName: my-sc-example
+  resources:
+    requests:
+      storage: 32Gi 

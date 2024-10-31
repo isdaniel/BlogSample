@@ -9,8 +9,7 @@ spec:
     storage: 10Gi
   accessModes:
     - ReadWriteOnce
-  persistentVolumeReclaimPolicy: Retain  # if set as "Delete" file share would be removed in pvc deletion
-  storageClassName: azurefile-csi
+  persistentVolumeReclaimPolicy: Retain  # if set as "Delete" file share would be
   # mountOptions:
   #   - dir_mode=0777
   #   - file_mode=0777
@@ -23,11 +22,29 @@ spec:
   #   - nobrl  # disable sending byte range lock requests to the server and for applications which have challenges with posix locks
   csi:
     driver: disk.csi.azure.com
-    # make sure volumeid is unique for every identical share in the cluster
-    volumeHandle: {azure-disk-uri}
+    volumeHandle: {disk-uri}
     volumeAttributes:
       fsType: ext4
-    # nodeStageSecretRef:
-    #   name: azure-secret
-    #   namespace: default
-
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  annotations:
+  name: pvc-azurefile
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 10Gi
+  # 也可以用選擇器來指定要使用的 PV
+  # selector:
+  #   matchLabels:
+  #     release: "stable"
+  #   matchExpressions:
+  #     - key: environment
+  #       operator: In
+  #       values:
+  #         - production
+  #         - qa
+  #         - staging
