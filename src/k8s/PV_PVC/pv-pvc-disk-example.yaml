@@ -22,7 +22,7 @@ spec:
   #   - nobrl  # disable sending byte range lock requests to the server and for applications which have challenges with posix locks
   csi:
     driver: disk.csi.azure.com
-    volumeHandle: {disk-uri}
+    volumeHandle: /subscriptions/920c2ea4-4af8-4dfe-812d-b5070befb952/resourcegroups/my-aks-dd_group/providers/Microsoft.Compute/disks/aks-pv-disk
     volumeAttributes:
       fsType: ext4
 ---
