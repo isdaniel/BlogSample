@@ -1,0 +1,12 @@
+.create table SlowQueryLogs (
+    Time: datetime,
+    User: string,
+    Host: string,
+    Id: int,
+    QueryTime: real,
+    LockTime: real,
+    RowsSent: int,
+    RowsExamined: int,
+    Query: string
+)
+
