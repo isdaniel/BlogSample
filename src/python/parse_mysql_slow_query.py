@@ -16,7 +16,7 @@ csv_file_path = args.output_csv
 time_pattern = re.compile(r"# Time: ([\d\-TZ:]+)")
 user_host_pattern = re.compile(r"# User@Host: (.*?)\[.*?\] @  \[(.*?)\]  Id: (.*\d)")
 query_stats_pattern = re.compile(r"# Query_time: ([\d.]+)  Lock_time: ([\d.]+) Rows_sent: (\d+)  Rows_examined: (\d+)")
-query_start_pattern = re.compile(r"^(SELECT|INSERT|UPDATE|DELETE).*", re.IGNORECASE)
+query_start_pattern = re.compile(r"^(\/\*|SELECT|INSERT|UPDATE|DELETE).*", re.IGNORECASE)
 
 # Open the CSV file for writing
 with open(csv_file_path, mode="w", newline="") as csv_file:
@@ -27,7 +27,7 @@ with open(csv_file_path, mode="w", newline="") as csv_file:
     ])
     for log_file_path in log_file_paths:
         # Read and parse the log file
-        with open(log_file_path, "r") as log_file:
+        with open(log_file_path, "r", encoding='utf-8') as log_file:
             current_record = {}
             current_query = []
             for line in log_file:
