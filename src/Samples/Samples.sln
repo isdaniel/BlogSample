@@ -1,7 +1,7 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
-# Visual Studio Version 16
-VisualStudioVersion = 16.0.31005.135
+# Visual Studio Version 17
+VisualStudioVersion = 17.11.35431.28
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "YearDiffSample", "YearDiffSample\YearDiffSample.csproj", "{1246BFFB-0EB3-4D86-8FCB-EE6D353F4423}"
 EndProject
@@ -16,8 +16,6 @@ EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "RabbitMqProducer", "RabbitMqProducer\RabbitMqProducer.csproj", "{CE61D5D7-9F00-4A9A-B443-AEBD7D145E1C}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Box_UnBoxing", "Box_UnBoxing\Box_UnBoxing.csproj", "{0AA20966-CDAF-41E5-A37F-9EF783F7C67D}"
-EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ParameterConvertor", "ParameterConvertor\ParameterConvertor.csproj", "{80819441-F06A-4572-AFA0-802BC6C780B4}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MultiThreadSample", "MutiThreadSample\MultiThreadSample.csproj", "{9CAD17A3-A05F-4A59-8517-91B3093A43A4}"
 EndProject
@@ -37,7 +35,7 @@ Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "VolatileSample", "VolatileS
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "DynamicORMSample", "DynamicORMSample\DynamicORMSample.csproj", "{D72F16A2-CB94-419B-9D06-F61E38D98C23}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DeadLockSample", "DeadLockSample\DeadLockSample.csproj", "{CBD27C5B-9790-4F41-933B-4AA6BAA04B3B}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "DeadLockSample", "DeadLockSample\DeadLockSample.csproj", "{CBD27C5B-9790-4F41-933B-4AA6BAA04B3B}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -69,10 +67,6 @@ Global
 		{0AA20966-CDAF-41E5-A37F-9EF783F7C67D}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{0AA20966-CDAF-41E5-A37F-9EF783F7C67D}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{0AA20966-CDAF-41E5-A37F-9EF783F7C67D}.Release|Any CPU.Build.0 = Release|Any CPU
-		{80819441-F06A-4572-AFA0-802BC6C780B4}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{80819441-F06A-4572-AFA0-802BC6C780B4}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{80819441-F06A-4572-AFA0-802BC6C780B4}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{80819441-F06A-4572-AFA0-802BC6C780B4}.Release|Any CPU.Build.0 = Release|Any CPU
 		{9CAD17A3-A05F-4A59-8517-91B3093A43A4}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
 		{9CAD17A3-A05F-4A59-8517-91B3093A43A4}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{9CAD17A3-A05F-4A59-8517-91B3093A43A4}.Release|Any CPU.ActiveCfg = Release|Any CPU

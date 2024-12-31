@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -32,9 +32,10 @@ namespace RabbitMqProducer
                 //建立一個Exchange
                 channel.ExchangeDeclare(exchangeName, ExchangeType.Direct, true, false, null);
                 //把Queue跟Exchange
-                channel.QueueBind(queueName, exchangeName, routeKey); 
+                channel.QueueBind(queueName, exchangeName, routeKey);
                 #endregion
-
+                string replayQueueName  = "reply-queue";
+                channel.QueueDeclare(replayQueueName, true, false, false, null);
                 Console.WriteLine("\nRabbitMQ連接成功,如需離開請按下Escape鍵");
 
                 string input = string.Empty;
@@ -43,9 +44,12 @@ namespace RabbitMqProducer
                     input = Console.ReadLine();
 
                     var messageBytes = Encoding.UTF8.GetBytes(input);
+                    var prop = channel.CreateBasicProperties();
+                    prop.ReplyTo = replayQueueName;
                     channel.BasicPublish(exchange: exchangeName,
                                          routingKey: routeKey,
-                                         body: messageBytes);
+                                         prop,
+                                         messageBytes);
 
                 } while (Console.ReadKey().Key != ConsoleKey.Escape);
             }
