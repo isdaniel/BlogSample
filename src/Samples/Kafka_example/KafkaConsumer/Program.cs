@@ -12,7 +12,22 @@ var config = new ConsumerConfig
     EnableAutoCommit = false,  // Automatically commit offsets
 };
 
-using var consumer = new ConsumerBuilder<Ignore, string>(config).Build();
+using var consumer = new ConsumerBuilder<Ignore, string>(config).SetPartitionsAssignedHandler((c, partitions) =>
+{
+    Console.WriteLine("Partitions assigned:");
+    foreach (var partition in partitions)
+    {
+        Console.WriteLine($" - Topic: {partition.Topic}, Partition: {partition.Partition}");
+    }
+})
+    .SetPartitionsRevokedHandler((c, partitions) =>
+    {
+        Console.WriteLine("Partitions revoked:");
+        foreach (var partition in partitions)
+        {
+            Console.WriteLine($" - Topic: {partition.Topic}, Partition: {partition.Partition}");
+        }
+    }).Build();
 
 Console.WriteLine("Connecting to Kafka...");
 
@@ -20,7 +35,7 @@ try
 {
     // Subscribe to the topic
     consumer.Subscribe(topic);
-
+    
     Console.WriteLine($"Subscribed to topic: {topic}");
     Console.WriteLine("Press Ctrl+C to exit.");
 
