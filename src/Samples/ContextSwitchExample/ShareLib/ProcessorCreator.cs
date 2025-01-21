@@ -1,7 +1,11 @@
-﻿using System;
+using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Text;
+using System.Text.Json;
+using MessagePack;
+using MessagePack.Resolvers;
 
 namespace ShareLib
 {
@@ -64,9 +68,29 @@ namespace ShareLib
         }
     }
 
+    [MessagePackObject]
     public class ValueModel
     {
+        [Key(0)]
         public int Value { get; set; }
     }
 
+    [MessagePackObject]
+    public class MessageInputTask
+    {
+        [Key(0)]
+        public string Message { get; set; }
+        [Key(1)]
+        public string CorrelationId { get; set; }
+        [Key(2)]
+        public string OriginalQueueName { get; set; }
+
+        [Key(3)]
+        [MessagePackFormatter(typeof(PrimitiveObjectResolver))]
+        public IDictionary<string, object> Headers { get; set; }
+        internal string ToJsonMessage()
+        {
+            return JsonSerializer.Serialize(this);
+        }
+    }
 }

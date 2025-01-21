@@ -1,6 +1,11 @@
+using MessagePack;
 using ShareLib;
+using System;
 using System.Diagnostics;
 using System.IO.Pipes;
+using System.Net;
+using System.Reflection;
+using System.Reflection.PortableExecutable;
 using System.Runtime.InteropServices;
 using System.Security.AccessControl;
 using System.Text.Json;
@@ -9,88 +14,79 @@ using System.Threading;
 
 class Program
 {
-    // P/Invoke declarations
-    [DllImport("kernel32.dll", SetLastError = true)]
-    private static extern bool SetConsoleCtrlHandler(ConsoleCtrlHandlerDelegate handler, bool add);
-
-    // Delegate for handling control events
-    private delegate bool ConsoleCtrlHandlerDelegate(CtrlType ctrlType);
-
-    // Control signal types
-    private enum CtrlType
-    {
-        CTRL_C_EVENT = 0,
-        CTRL_BREAK_EVENT = 1,
-        CTRL_CLOSE_EVENT = 2,
-        CTRL_LOGOFF_EVENT = 5,
-        CTRL_SHUTDOWN_EVENT = 6
-    }
-
-    private static ConsoleCtrlHandlerDelegate _handler; // Keep a reference to prevent GC
-    //static TaskCompletionSource tcs = new TaskCompletionSource();
     static async Task Main(string[] args)
     {
-        string pipeLineName = Console.ReadLine();
+        //NamedPipeClientStream _operationPipe;
+        //NamedPipeClientStream _dataPipe;
+        string operationPipeName = args[0];
+        string dataPipeName = args[1];
+        //await Task.Delay(12000);
         var task = Task.Run(async () => {
-            using (var client = new NamedPipeClientStream(".", pipeLineName, PipeDirection.InOut,PipeOptions.Asynchronous))
+            using (var client = new NamedPipeClientStream(".", operationPipeName, PipeDirection.InOut,PipeOptions.Asynchronous))
             {
                 await client.ConnectAsync();
                 using (var reader = new StreamReader(client))
-                using (var writer = new StreamWriter(client) { AutoFlush = true })
                 {
                     string line;
                     while ((line = await reader.ReadLineAsync()) != null && line != "context-switch")
                     {
-                        await writer.WriteLineAsync($"Received: {line}");
                     }
                 }
             }
         });
 
-        //Console.CancelKeyPress += (sender, e) =>
-        //{
-        //    Console.WriteLine($"[{Process.GetCurrentProcess().Id}, {DateTime.Now:yyyy:MM:dd hh:mm:ss}] Ctrl+C received! Cleaning up!!...\r\n");
-        //    e.Cancel = true; // Prevent default behavior if necessary
-        //    Console.WriteLine($"[{Process.GetCurrentProcess().Id}, {DateTime.Now:yyyy:MM:dd hh:mm:ss}] Ctrl+C received! end!!...\r\n");
-        //};
-
         int currVal = 0;
-        while (!task.IsCompleted) {
-            var inputMessage  = Console.ReadLine();
-            var model = JsonSerializer.Deserialize<ValueModel>(inputMessage);
-            //mock logical
-            Thread.Sleep(1000);
-            currVal = model.Value;
-            Console.WriteLine($"[{DateTime.Now:yyyy:MM:dd hh:mm:ss}, PID: {Process.GetCurrentProcess().Id}] model.val:{model.Value}");
+
+        using (var client = new NamedPipeClientStream(".", dataPipeName, PipeDirection.InOut, PipeOptions.Asynchronous | PipeOptions.WriteThrough))
+        using (var pipeStream = new PipeStreamWrapper(client))
+        {
+            await client.ConnectAsync();
+            
+            while (!task.IsCompleted)
+            {
+                //var buffer = await ReadFromStreamAsync(client);
+                //var resModel = MessagePackSerializer.Deserialize<ValueModel>(buffer);
+                var res = await pipeStream.ReadAsync<int>(); 
+                Thread.Sleep(1000);
+                res += 100;
+                //await WriteToStreamAsync(client, MessagePackSerializer.Serialize(resModel));
+                await pipeStream.WriteAsync(res);
+            }
+            
+           
+
+            await task;
         }
-        Console.WriteLine($"[{DateTime.Now:yyyy:MM:dd hh:mm:ss}, PID: {Process.GetCurrentProcess().Id}]wait for task Completed");
-        await task;
-        await File.WriteAllLinesAsync($"./{pipeLineName}.txt", new string[] { currVal.ToString() });
-        Console.WriteLine($"[{DateTime.Now:yyyy:MM:dd hh:mm:ss}, PID: {Process.GetCurrentProcess().Id}]Task Is TaskCompleted");
+
+        Console.WriteLine();
     }
 
-    //private static bool ConsoleCtrlHandler(CtrlType ctrlType)
-    //{
-    //    switch (ctrlType)
-    //    {
-    //        case CtrlType.CTRL_C_EVENT:
-    //            File.AppendAllTextAsync("./log.txt", $"[{Process.GetCurrentProcess().Id}] Ctrl+C received! Cleaning up!!...\r\n");
-    //            // Perform cleanup or graceful shutdown
-    //            tcs.SetResult();
-    //            return true; // Signal handled
+    private static async Task<byte[]> ReadFromStreamAsync(Stream stream)
+    {
+        // Read the payload length (4 bytes for an int)
+        var lengthBuffer = new byte[4];
+        await stream.ReadAsync(lengthBuffer, 0, lengthBuffer.Length);
+        int payloadLength = BitConverter.ToInt32(lengthBuffer, 0);
 
-    //        case CtrlType.CTRL_CLOSE_EVENT:
-    //            Console.WriteLine("Console is closing...");
-    //            // Perform cleanup if necessary
-    //            return true;
+        // Read the payload based on its length
+        var payloadBuffer = new byte[payloadLength];
+        int bytesRead = 0;
+        while (bytesRead < payloadLength)
+        {
+            bytesRead += await stream.ReadAsync(payloadBuffer, bytesRead, payloadLength - bytesRead);
+        }
 
-    //        case CtrlType.CTRL_LOGOFF_EVENT:
-    //        case CtrlType.CTRL_SHUTDOWN_EVENT:
-    //            Console.WriteLine("System is shutting down...");
-    //            return true;
+        return payloadBuffer;
+    }
 
-    //        default:
-    //            return false; // Pass to default handler
-    //    }
-    //}
+    private static async Task WriteToStreamAsync(Stream stream, byte[] data)
+    {
+        // Write the length of the payload
+        byte[] lengthBuffer = BitConverter.GetBytes(data.Length);
+        await stream.WriteAsync(lengthBuffer, 0, lengthBuffer.Length);
+
+        // Write the actual payload
+        await stream.WriteAsync(data, 0, data.Length);
+        await stream.FlushAsync();
+    }
 }
