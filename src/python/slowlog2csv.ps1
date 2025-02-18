@@ -22,7 +22,7 @@ param(
 
 $logFiles = Get-ChildItem -Path $LogDir -Filter *.log | ForEach-Object { $_.FullName }
 
-Write-Host $logFiles
+# Write-Host $logFiles
 
 # Build the python command
 if ($Output_csv) {
