@@ -5,10 +5,10 @@
     .
 .PARAMETER LogDir
     The LogDir to the .
-.PARAMETER 
+.PARAMETER
 
 .EXAMPLE
-    C:\PS> 
+    C:\PS>
     <Description of example>
 .NOTES
     Author: Daniel shih
@@ -21,6 +21,8 @@ param(
 )
 
 $logFiles = Get-ChildItem -Path $LogDir -Filter *.log | ForEach-Object { $_.FullName }
+
+Write-Host $logFiles
 
 # Build the python command
 if ($Output_csv) {
