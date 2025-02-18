@@ -13,9 +13,9 @@ log_file_paths = args.log_file_path
 csv_file_path = args.output_csv
 # User@Host: alfresco[alfresco] @  [10.129.9.135]  Id: 75031
 # Regular expressions to capture relevant log details
-time_pattern = re.compile(r"# Time: ([\d\-TZ:]+)")
-user_host_pattern = re.compile(r"# User@Host: (.*?)\[.*?\] @  \[(.*?)\]  Id: (.*\d)")
-query_stats_pattern = re.compile(r"# Query_time: ([\d.]+)  Lock_time: ([\d.]+) Rows_sent: (\d+)  Rows_examined: (\d+)")
+time_pattern = re.compile(r"#\s*Time\s*:\s*([\d\-TZ:]+)")
+user_host_pattern = re.compile(r"#\s*User@Host\s*:\s*(.*?)\s*\[.*?\]\s*@\s*\[(.*?)\]\s*Id\s*:\s*(.*\d)")
+query_stats_pattern = re.compile(r"#\s*Query_time\s*:\s*([\d.]+)\s*Lock_time\s*:\s*([\d.]+)\s*Rows_sent\s*:\s*(\d+)\s*Rows_examined\s*:\s*(\d+)")
 query_start_pattern = re.compile(r"^(\/\*|SELECT|INSERT|UPDATE|DELETE).*", re.IGNORECASE)
 
 # Open the CSV file for writing
@@ -51,7 +51,7 @@ with open(csv_file_path, mode="w", newline="") as csv_file:
                         # Clear for the next query
                         current_record = {}
                         current_query = []
-                    
+
                     # Start a new record with the current time
                     current_record["Time"] = time_match.group(1)
 
