@@ -1,0 +1,2470 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PostgreSQL Extension 與 Hook 機制 — 用 Rust pgrx 實戰拆解 redis_fdw_rs</title>
+<link rel="stylesheet" href="https://api.fontshare.com/v2/css?f[]=clash-display@700,600,500,400&f[]=satoshi@700,500,400,300&display=swap">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Noto+Sans+TC:wght@300;400;500;700;900&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+<style>
+/* ===========================================
+   VIEWPORT BASE (mandatory)
+   =========================================== */
+* { margin: 0; padding: 0; box-sizing: border-box; }
+html, body { height: 100%; overflow-x: hidden; }
+html { scroll-snap-type: y mandatory; scroll-behavior: smooth; }
+.slide { width: 100vw; height: 100vh; height: 100dvh; overflow: hidden; scroll-snap-align: start; display: flex; flex-direction: column; position: relative; }
+.slide-content { flex: 1; display: flex; flex-direction: column; justify-content: center; max-height: 100%; overflow: hidden; padding: var(--slide-padding); position: relative; z-index: 2; }
+:root {
+  --title-size: clamp(1.6rem, 5vw, 4rem);
+  --h2-size: clamp(1.2rem, 3.2vw, 2.4rem);
+  --h3-size: clamp(0.95rem, 2vw, 1.5rem);
+  --body-size: clamp(0.72rem, 1.25vw, 1.05rem);
+  --small-size: clamp(0.6rem, 0.9vw, 0.82rem);
+  --slide-padding: clamp(1rem, 3.5vw, 3.5rem);
+  --content-gap: clamp(0.5rem, 1.5vw, 1.5rem);
+  --element-gap: clamp(0.25rem, 0.8vw, 0.8rem);
+}
+.card, .container, .content-box { max-width: min(95vw, 1400px); }
+img, .image-container { max-width: 100%; max-height: min(50vh, 400px); object-fit: contain; }
+@media (max-height: 700px) { :root { --slide-padding: clamp(0.75rem, 2.5vw, 1.8rem); --content-gap: clamp(0.4rem, 1.2vw, 1rem); --title-size: clamp(1.3rem, 4.2vw, 2.5rem); --h2-size: clamp(1rem, 2.8vw, 1.7rem); --body-size: clamp(0.7rem, 1.1vw, 0.95rem); } }
+@media (max-height: 600px) { :root { --slide-padding: clamp(0.5rem, 2vw, 1.2rem); --title-size: clamp(1.1rem, 3.8vw, 2rem); --body-size: clamp(0.65rem, 1vw, 0.85rem); } .chrome-top, .chrome-bot, .nav-dots { display: none; } }
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.2s !important; } html { scroll-behavior: auto; } }
+
+/* ===========================================
+   THEME: Neon Cyber
+   =========================================== */
+:root {
+  --bg-0: #050813;
+  --bg-1: #0a0f1c;
+  --bg-2: #111827;
+  --bg-3: #1a2342;
+  --cyan: #00ffcc;
+  --cyan-glow: rgba(0, 255, 204, 0.35);
+  --cyan-dim: #00b890;
+  --magenta: #ff2bd6;
+  --magenta-glow: rgba(255, 43, 214, 0.3);
+  --amber: #ffb547;
+  --blue: #5b8cff;
+  --text: #e6f7ff;
+  --text-dim: #8fa3c4;
+  --text-mute: #4a5a78;
+  --rule: rgba(0, 255, 204, 0.18);
+  --rule-strong: rgba(0, 255, 204, 0.5);
+  --code-bg: #060b18;
+}
+body {
+  background: var(--bg-0);
+  color: var(--text);
+  font-family: 'Satoshi', 'Noto Sans TC', system-ui, sans-serif;
+  font-weight: 400;
+  -webkit-font-smoothing: antialiased;
+  letter-spacing: 0.005em;
+}
+h1, h2, h3, .display { font-family: 'Clash Display', 'Noto Sans TC', sans-serif; font-weight: 700; line-height: 1.1; letter-spacing: -0.01em; }
+.mono { font-family: 'JetBrains Mono', monospace; }
+
+/* Grid + glow backdrop on every slide */
+.slide::before {
+  content: ""; position: absolute; inset: 0; z-index: 0; pointer-events: none;
+  background:
+    radial-gradient(ellipse at 18% 12%, rgba(0,255,204,0.13), transparent 55%),
+    radial-gradient(ellipse at 85% 88%, rgba(255,43,214,0.10), transparent 55%),
+    linear-gradient(180deg, var(--bg-1) 0%, var(--bg-0) 100%);
+}
+.slide::after {
+  content: ""; position: absolute; inset: 0; z-index: 0; pointer-events: none;
+  background-image:
+    linear-gradient(rgba(0,255,204,0.045) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0,255,204,0.045) 1px, transparent 1px);
+  background-size: 56px 56px;
+  mask-image: radial-gradient(ellipse at center, black 25%, transparent 75%);
+  -webkit-mask-image: radial-gradient(ellipse at center, black 25%, transparent 75%);
+}
+
+/* Chrome top/bottom */
+.chrome-top, .chrome-bot {
+  position: absolute; left: 0; right: 0; padding: 0.55rem 2rem;
+  font-family: 'JetBrains Mono', monospace; font-size: var(--small-size);
+  color: var(--text-mute); display: flex; justify-content: space-between;
+  z-index: 5; pointer-events: none;
+}
+.chrome-top { top: 0; border-bottom: 1px solid var(--rule); }
+.chrome-bot { bottom: 0; border-top: 1px solid var(--rule); }
+.chrome-top .l::before { content: "● "; color: var(--cyan); margin-right: 4px; }
+.chrome-bot .r { color: var(--cyan); }
+
+/* Typographic helpers */
+h1 { font-size: var(--title-size); }
+h2 { font-size: var(--h2-size); margin-bottom: var(--content-gap); color: var(--text); }
+h2 .accent { color: var(--cyan); text-shadow: 0 0 24px var(--cyan-glow); }
+h3 { font-size: var(--h3-size); color: var(--text); margin-bottom: 0.6rem; }
+p, li { font-size: var(--body-size); line-height: 1.55; color: var(--text-dim); }
+strong { color: var(--text); font-weight: 600; }
+.cyan { color: var(--cyan); }
+.magenta { color: var(--magenta); }
+.amber { color: var(--amber); }
+.blue { color: var(--blue); }
+
+/* Tag / badge */
+.tag {
+  display: inline-flex; align-items: center; gap: 0.4rem;
+  padding: 0.3rem 0.85rem; border: 1px solid var(--rule-strong);
+  border-radius: 999px; color: var(--cyan);
+  font-family: 'JetBrains Mono', monospace; font-size: var(--small-size);
+  text-transform: uppercase; letter-spacing: 0.12em;
+  background: rgba(0,255,204,0.06);
+}
+.tag::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--cyan); box-shadow: 0 0 8px var(--cyan); }
+
+/* Cards */
+.card {
+  background: linear-gradient(180deg, rgba(17,24,39,0.85), rgba(10,15,28,0.85));
+  border: 1px solid var(--rule);
+  border-radius: 14px;
+  padding: clamp(0.8rem, 1.5vw, 1.4rem);
+  backdrop-filter: blur(8px);
+  position: relative;
+}
+.card.accent-cyan { border-left: 3px solid var(--cyan); }
+.card.accent-magenta { border-left: 3px solid var(--magenta); }
+.card.accent-amber { border-left: 3px solid var(--amber); }
+.card.accent-blue { border-left: 3px solid var(--blue); }
+.card h3 { color: var(--text); font-size: var(--h3-size); margin-bottom: 0.5rem; }
+.card p, .card li { font-size: calc(var(--body-size) * 0.92); }
+
+/* Grids */
+.grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: var(--content-gap); }
+.grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--content-gap); }
+.grid-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: calc(var(--content-gap) * 0.7); }
+@media (max-width: 900px) { .grid-3, .grid-4 { grid-template-columns: 1fr 1fr; } }
+
+/* Lists */
+ul.bullet { list-style: none; padding: 0; }
+ul.bullet li { position: relative; padding-left: 1.4rem; margin-bottom: 0.45rem; }
+ul.bullet li::before { content: "▸"; position: absolute; left: 0; color: var(--cyan); font-weight: 700; }
+ol.steps { list-style: none; padding: 0; counter-reset: step; }
+ol.steps li { position: relative; padding-left: 2.4rem; margin-bottom: 0.55rem; counter-increment: step; }
+ol.steps li::before {
+  content: counter(step, decimal-leading-zero);
+  position: absolute; left: 0; top: 0;
+  font-family: 'JetBrains Mono', monospace; font-size: 0.85em;
+  color: var(--cyan); font-weight: 700;
+  border: 1px solid var(--rule-strong);
+  width: 1.8rem; height: 1.8rem; border-radius: 6px;
+  display: flex; align-items: center; justify-content: center;
+  background: rgba(0,255,204,0.05);
+}
+
+/* Code blocks */
+.code {
+  background: var(--code-bg);
+  border: 1px solid var(--rule);
+  border-radius: 10px;
+  padding: clamp(0.7rem, 1.2vw, 1.1rem) clamp(0.9rem, 1.4vw, 1.3rem);
+  font-family: 'JetBrains Mono', monospace;
+  font-size: calc(var(--body-size) * 0.88);
+  line-height: 1.55;
+  color: #d6e7ff;
+  white-space: pre; overflow: auto;
+  position: relative;
+}
+.code.with-dots { /* mac dots removed — alias kept for backward compat */ }
+.code .kw { color: #ff6dcf; font-weight: 600; }
+.code .fn { color: #5cc8ff; }
+.code .str { color: #8df0a8; }
+.code .com { color: #5a7390; font-style: italic; }
+.code .num { color: #ffb547; }
+.code .type { color: #c8a8ff; }
+.code .mac { color: #ffd166; }
+
+.inline-code {
+  font-family: 'JetBrains Mono', monospace;
+  background: rgba(0,255,204,0.10);
+  color: var(--cyan);
+  padding: 1px 7px; border-radius: 4px; font-size: 0.92em;
+  border: 1px solid var(--rule);
+}
+
+/* Pipeline / flow */
+.pipeline { display: flex; align-items: stretch; gap: 0.5rem; flex-wrap: nowrap; justify-content: center; margin: 1rem 0; }
+.pipeline-step {
+  flex: 1; min-width: 0;
+  background: rgba(17,24,39,0.75);
+  border: 1px solid var(--rule-strong);
+  border-radius: 10px;
+  padding: 0.7rem 0.6rem;
+  text-align: center;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: calc(var(--small-size) * 1.05);
+  color: var(--text);
+  position: relative;
+}
+.pipeline-step .num { display: block; color: var(--cyan); font-size: 0.75em; margin-bottom: 4px; letter-spacing: 0.15em; }
+.pipeline-step.hook { border-color: var(--magenta); box-shadow: 0 0 18px rgba(255,43,214,0.25) inset; }
+.pipeline-step.hook .num { color: var(--magenta); }
+.pipeline-arrow { display: flex; align-items: center; color: var(--cyan); font-size: 1.2em; }
+
+/* Tables */
+table { width: 100%; border-collapse: collapse; font-size: calc(var(--body-size) * 0.92); }
+th, td { padding: 0.55rem 0.7rem; text-align: left; border-bottom: 1px solid var(--rule); }
+th { color: var(--cyan); font-family: 'JetBrains Mono', monospace; font-size: 0.85em; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; background: rgba(0,255,204,0.05); }
+td { color: var(--text-dim); }
+td strong { color: var(--text); }
+
+/* Takeaway box */
+.takeaway {
+  margin-top: var(--content-gap);
+  padding: 0.8rem 1.2rem;
+  background: linear-gradient(90deg, rgba(0,255,204,0.10), rgba(255,43,214,0.06));
+  border-left: 3px solid var(--cyan);
+  border-radius: 8px;
+  font-size: var(--body-size);
+  color: var(--text);
+}
+.takeaway::before { content: "▸ "; color: var(--cyan); font-family: 'JetBrains Mono', monospace; font-weight: 700; letter-spacing: 0.1em; }
+
+/* Cover-specific */
+.cover { justify-content: center; align-items: flex-start; }
+.cover .slide-content { justify-content: center; gap: var(--content-gap); }
+.cover h1 { font-size: clamp(2rem, 6.5vw, 5.5rem); line-height: 1.02; }
+.cover h1 .line2 { display: block; color: var(--cyan); text-shadow: 0 0 30px var(--cyan-glow); }
+.cover .subtitle { font-size: clamp(0.9rem, 1.8vw, 1.4rem); color: var(--text-dim); max-width: 60ch; margin-top: 0.5rem; }
+.cover .byline { display: flex; gap: 1.5rem; font-family: 'JetBrains Mono', monospace; font-size: var(--small-size); color: var(--text-mute); margin-top: 1.5rem; flex-wrap: wrap; }
+.cover .byline strong { color: var(--cyan); margin-right: 0.4rem; }
+
+/* Section divider slide */
+.section-slide .slide-content { justify-content: center; gap: 0.8rem; }
+.section-slide .sec-num { font-family: 'JetBrains Mono', monospace; font-size: clamp(0.8rem, 1.4vw, 1.1rem); color: var(--magenta); letter-spacing: 0.3em; }
+.section-slide .sec-title { font-family: 'Clash Display', sans-serif; font-size: clamp(2rem, 6vw, 4.5rem); font-weight: 700; color: var(--text); line-height: 1.05; }
+.section-slide .sec-title .accent { color: var(--cyan); }
+.section-slide .sec-desc { color: var(--text-dim); font-size: clamp(0.9rem, 1.6vw, 1.2rem); max-width: 60ch; margin-top: 0.6rem; }
+.section-slide .sec-time { display: inline-flex; align-items: center; gap: 0.5rem; margin-top: 1rem; padding: 0.35rem 0.85rem; border: 1px solid var(--rule-strong); border-radius: 999px; font-family: 'JetBrains Mono', monospace; font-size: var(--small-size); color: var(--cyan); width: fit-content; }
+
+/* Slide header (for content slides) */
+.slide-header { display: flex; align-items: baseline; gap: 1rem; margin-bottom: var(--content-gap); padding-bottom: 0.7rem; border-bottom: 1px solid var(--rule); }
+.slide-header .num { font-family: 'JetBrains Mono', monospace; color: var(--magenta); font-size: var(--small-size); letter-spacing: 0.2em; }
+.slide-header h2 { margin: 0; flex: 1; }
+
+/* Reveal animation */
+.reveal { opacity: 0; transform: translateY(20px); transition: opacity 0.7s cubic-bezier(0.16, 1, 0.3, 1), transform 0.7s cubic-bezier(0.16, 1, 0.3, 1); }
+.slide.visible .reveal { opacity: 1; transform: translateY(0); }
+.slide.visible .reveal:nth-child(1) { transition-delay: 0.08s; }
+.slide.visible .reveal:nth-child(2) { transition-delay: 0.18s; }
+.slide.visible .reveal:nth-child(3) { transition-delay: 0.28s; }
+.slide.visible .reveal:nth-child(4) { transition-delay: 0.38s; }
+.slide.visible .reveal:nth-child(5) { transition-delay: 0.48s; }
+.slide.visible .reveal:nth-child(6) { transition-delay: 0.58s; }
+
+/* Progress bar */
+.progress-bar { position: fixed; top: 0; left: 0; height: 3px; background: linear-gradient(90deg, var(--cyan), var(--magenta)); z-index: 100; transition: width 0.3s ease; width: 0; }
+
+/* Nav dots */
+.nav-dots { position: fixed; right: 1.5rem; top: 50%; transform: translateY(-50%); display: flex; flex-direction: column; gap: 0.35rem; z-index: 50; }
+.nav-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--text-mute); border: none; cursor: pointer; padding: 0; transition: all 0.3s; }
+.nav-dot.active { background: var(--cyan); box-shadow: 0 0 10px var(--cyan); transform: scale(1.4); }
+@media (max-width: 768px) { .nav-dots { display: none; } }
+
+/* Demo terminal */
+.terminal {
+  background: #02050d;
+  border: 1px solid var(--rule-strong);
+  border-radius: 10px;
+  padding: 0.9rem 1.1rem 1.1rem;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: calc(var(--body-size) * 0.88);
+  line-height: 1.6;
+  color: #c8e8ff;
+  position: relative;
+}
+.terminal::before { content: ""; display: none; }
+.terminal .prompt { color: var(--cyan); }
+.terminal .prompt::before { content: "$ "; }
+.terminal .out { color: var(--text-dim); }
+.terminal .ok { color: #8df0a8; }
+.terminal .warn { color: var(--amber); }
+
+/* utility */
+.center { text-align: center; }
+.flex-col { display: flex; flex-direction: column; gap: var(--element-gap); }
+.flex-row { display: flex; gap: var(--content-gap); align-items: stretch; }
+.kbd { font-family: 'JetBrains Mono', monospace; background: var(--bg-3); border: 1px solid var(--rule); border-radius: 4px; padding: 1px 7px; font-size: 0.85em; color: var(--text); }
+hr.divider { border: none; border-top: 1px solid var(--rule); margin: 0.7rem 0; }
+
+/* Goto-slide overlay */
+.page-no { transition: color 0.15s; }
+.page-no:hover { color: var(--cyan); text-shadow: 0 0 6px var(--cyan-glow); }
+.goto-overlay {
+  position: fixed; inset: 0; z-index: 200;
+  display: none; align-items: center; justify-content: center;
+  background: rgba(5, 8, 19, 0.78);
+  backdrop-filter: blur(6px);
+}
+.goto-overlay.open { display: flex; }
+.goto-card {
+  background: linear-gradient(180deg, rgba(17,24,39,0.98), rgba(10,15,28,0.98));
+  border: 1px solid var(--rule-strong);
+  border-radius: 14px;
+  padding: 1.6rem 1.8rem;
+  min-width: 320px;
+  box-shadow: 0 8px 48px rgba(0,0,0,0.5), 0 0 60px var(--cyan-glow);
+  font-family: 'JetBrains Mono', monospace;
+}
+.goto-card .title {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.75rem; letter-spacing: 0.25em;
+  color: var(--cyan); text-transform: uppercase;
+  margin-bottom: 0.8rem;
+}
+.goto-card .row { display: flex; align-items: center; gap: 0.6rem; }
+.goto-card input {
+  flex: 1; background: var(--code-bg);
+  border: 1px solid var(--rule-strong);
+  border-radius: 8px; padding: 0.7rem 0.9rem;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 1.4rem; color: var(--text);
+  outline: none; min-width: 0; -moz-appearance: textfield;
+}
+.goto-card input::-webkit-outer-spin-button,
+.goto-card input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+.goto-card input:focus { border-color: var(--cyan); box-shadow: 0 0 0 3px var(--cyan-glow); }
+.goto-card .total { color: var(--text-dim); font-size: 1.1rem; }
+.goto-card .hint {
+  margin-top: 0.7rem; font-size: 0.72rem;
+  color: var(--text-mute); letter-spacing: 0.04em;
+  display: flex; gap: 0.8rem; flex-wrap: wrap;
+}
+.goto-card .hint .kbd-mini {
+  background: var(--bg-3); border: 1px solid var(--rule);
+  padding: 1px 6px; border-radius: 3px; color: var(--text-dim);
+}
+.goto-card .cancel {
+  background: transparent; border: none;
+  color: var(--text-mute); cursor: pointer;
+  font-family: inherit; font-size: 0.75rem;
+  padding: 0.3rem 0.6rem; margin-left: auto;
+}
+.goto-card .cancel:hover { color: var(--magenta); }
+
+/* Force mermaid SVG to scale-to-fit its container instead of using natural size */
+.mermaid.fit-svg { display:flex; align-items:center; justify-content:center; }
+.mermaid.fit-svg > svg { max-width:100% !important; max-height:100% !important; width:auto !important; height:auto !important; }
+</style>
+</head>
+<body>
+<div class="progress-bar" id="progress"></div>
+<nav class="nav-dots" id="navDots"></nav>
+
+<!-- Goto-slide overlay -->
+<div class="goto-overlay" id="gotoOverlay" role="dialog" aria-label="Go to slide">
+  <div class="goto-card">
+    <div class="title">▸ Go to slide</div>
+    <div class="row">
+      <input id="gotoInput" type="number" min="1" placeholder="page #" autocomplete="off">
+      <span class="total" id="gotoTotal">/ —</span>
+    </div>
+    <div class="hint">
+      <span><span class="kbd-mini">Enter</span> jump</span>
+      <span><span class="kbd-mini">Esc</span> cancel</span>
+      <button class="cancel" data-action="cancel" type="button">cancel</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============== SLIDE 01 · COVER ============== -->
+<section class="slide cover" id="s01">
+  <div class="chrome-top"><span class="l">pgrx-sharing.session</span><span class="r page-no"></span></div>
+  <div class="slide-content">
+    <span class="tag reveal">Technical Sharing</span>
+    <h1 class="reveal">PostgreSQL Extension<br>與 Hook 機制<span class="line2">用 Rust pgrx 實戰拆解 redis_fdw_rs</span></h1>
+    <p class="subtitle reveal">介紹 PostgreSQL 從 SQL parsing 到 hook 機制、MemoryContext 與 Rust ownership 的接合,並透過 redis_fdw_rs 實際示範 pgrx 的開發流程。</p>
+    <div class="byline reveal">
+      <span><strong>SPEAKER</strong>Daniel Shih</span>
+      <span><strong>STACK</strong>PostgreSQL · Rust · pgrx <span style="color:var(--magenta)">(contributor)</span></span>
+      <span><strong>REPO</strong>github.com/isdaniel/redis_fdw_rs</span>
+    </div>
+  </div>
+  <div class="chrome-bot"><span class="l">// press → or space to advance</span><span class="r">live coding inside</span></div>
+</section>
+
+<!-- ============== SLIDE 01b · ABOUT ME ============== -->
+<section class="slide" id="s01b">
+  <div class="chrome-top"><span class="l">about.me</span><span class="r page-no"></span></div>
+  <div class="slide-content">
+    <div class="slide-header reveal"><span class="num">// 00</span><h2>About <span class="accent">Me</span></h2></div>
+
+    <div class="reveal" style="display:grid; grid-template-columns: 0.85fr 1.6fr; gap:1rem; align-items:stretch; flex:1; min-height:0">
+
+      <!-- 左欄: 照片 + 聯絡資訊 + 技能樹 -->
+      <div class="flex-col" style="gap:0.55rem; min-height:0">
+        <div style="display:flex; align-items:center; justify-content:center; background:linear-gradient(180deg,#0a0f1c,#060b18); border:1px solid var(--rule-strong); border-radius:12px; padding:0.4rem; min-height:0; overflow:hidden">
+          <img src="assets/daniel.jpg" alt="Ping-Shiu Shih (Daniel)" style="width:auto; height:auto; max-width:100%; max-height:30vh; object-fit:contain; border-radius:10px;">
+        </div>
+        <div class="card accent-cyan" style="padding:0.85rem 1.1rem">
+          <h3 style="margin-bottom:0.3rem; font-size:1.2em">Ping-Shiu Shih (Daniel)</h3>
+          <p style="font-size:0.98em; color:var(--text-dim)">石秉修 · Support Escalation Engineer @ Microsoft</p>
+          <ul class="bullet" style="font-size:0.98em; margin-top:0.6rem; line-height:1.7">
+            <li>blog · <a href="https://isdaniel.github.io/" target="_blank" rel="noopener" class="cyan" style="text-decoration:none">isdaniel.github.io</a></li>
+            <li>github · <a href="https://github.com/isdaniel" target="_blank" rel="noopener" class="cyan" style="text-decoration:none">isdaniel</a></li>
+            <li>linkedin · <a href="https://www.linkedin.com/in/bing-shiu-shih-a63151b5/" target="_blank" rel="noopener" class="cyan" style="text-decoration:none">bing-shiu-shih</a></li>
+          </ul>
+        </div>
+      </div>
+
+      <!-- 右欄: 工作經歷 timeline + GitHub 代表專案 -->
+      <div class="flex-col" style="gap:0.5rem; min-height:0">
+        <div class="card accent-magenta" style="padding:0.55rem 0.9rem">
+          <h3 style="margin-bottom:0.25rem; font-size:0.98em">Employment</h3>
+          <div style="display:flex; flex-direction:column; gap:0.4rem; font-size:0.85em">
+            <div style="display:grid; grid-template-columns: 0.42fr 1fr; gap:0.7rem; align-items:baseline; padding-bottom:0.3rem; border-bottom:1px dashed var(--rule)">
+              <div>
+                <div class="mono cyan" style="font-size:0.95em">2022.10, now</div>
+                <div style="font-size:0.85em; color:var(--text-dim)">Microsoft</div>
+              </div>
+              <div><strong>Support Escalation Engineer</strong> + Technical Support Engineer</div>
+            </div>
+            <div style="display:grid; grid-template-columns: 0.42fr 1fr; gap:0.7rem; align-items:baseline; padding-bottom:0.3rem; border-bottom:1px dashed var(--rule)">
+              <div>
+                <div class="mono cyan" style="font-size:0.95em">2021, 2022.10</div>
+                <div style="font-size:0.85em; color:var(--text-dim)">91APP</div>
+              </div>
+              <div><strong>Senior Software Engineer</strong></div>
+            </div>
+            <div style="display:grid; grid-template-columns: 0.42fr 1fr; gap:0.7rem; align-items:baseline; padding-bottom:0.3rem; border-bottom:1px dashed var(--rule)">
+              <div>
+                <div class="mono cyan" style="font-size:0.95em">2018.12, 2021.08</div>
+                <div style="font-size:0.85em; color:var(--text-dim)">Xuenn Pte Ltd</div>
+              </div>
+              <div><strong>IT Consultant</strong></div>
+            </div>
+            <div style="display:grid; grid-template-columns: 0.42fr 1fr; gap:0.7rem; align-items:baseline">
+              <div>
+                <div class="mono cyan" style="font-size:0.95em">2017.04, 2018.04</div>
+                <div style="font-size:0.85em; color:var(--text-dim)">EC&#39;Pay 綠界</div>
+              </div>
+              <div><strong>Software Engineer</strong></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="card accent-cyan" style="padding:0.55rem 0.9rem">
+          <h3 style="margin-bottom:0.2rem; font-size:0.95em">GitHub 代表專案 · <span class="cyan">isdaniel</span></h3>
+          <ul class="bullet" style="font-size:0.8em; line-height:1.5">
+            <li><strong>pgrx</strong> · contributor to <span class="cyan">pgcentralfoundation/pgrx</span></li>
+            <li><strong>redis_fdw_rs</strong> · PostgreSQL FDW for Redis (Rust + pgrx) <span style="color:var(--text-dim)">— 今天主軸</span></li>
+            <li><strong>pg_where_guard</strong> · PostgreSQL extension that blocks DELETE / UPDATE / TRUNCATE without WHERE (Rust + pgrx)</li>
+            <li><strong>pg-walstream</strong> · PostgreSQL WAL streaming library (Rust)</li>
+            <li><strong>pg2any</strong> · PostgreSQL CDC replication tool, PG → any DB (Rust)</li>
+            <li><strong>pg_dbmigrator</strong> · PostgreSQL migration tool, offline dump + logical replication near-zero downtime (Rust)</li>
+            <li><strong>pgtuner_mcp</strong> · AI-powered PostgreSQL tuner (Python / MCP)</li>
+            <li><strong>mysqltuner_mcp</strong> · AI-powered MySQL performance tuning MCP server (Python)</li>
+            <li><strong>MiniExcel / MiniWord</strong> · fast, low-memory Excel/Word .NET helper <span style="color:var(--text-dim)">(member)</span></li>
+            <li><strong>AwesomeProxy.Net</strong> · dynamic proxy / AOP framework for .NET</li>
+            <li><strong>MessageWorkerPool</strong> · worker-process pool with message queue integration &amp; graceful shutdown (C#)</li>
+            <li><strong>ElectronicInvoice_TW</strong> · 台灣電子發票 SDK (NuGet)</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="chrome-bot"><span class="l">// .NET + SQL Server → Rust + PostgreSQL</span><span class="r">github.com/isdaniel</span></div>
+</section>
+
+<!-- ============== SLIDE 02 · AGENDA ============== -->
+<section class="slide" id="s02">
+  <div class="chrome-top"><span class="l">agenda.md</span><span class="r page-no"></span></div>
+  <div class="slide-content">
+    <div class="slide-header reveal"><span class="num">// 00</span><h2>Agenda</h2></div>
+    <div class="grid-3 reveal">
+      <div class="card accent-cyan"><h3>① SQL 執行流程</h3><p>Parser → Analyzer → Rewriter → Planner → Executor,以及 hook 怎麼介入</p></div>
+      <div class="card accent-cyan"><h3>② Extension 結構</h3><p>三件套、能掛點的擴充面 (hook / bgworker / FDW / index AM)</p></div>
+      <div class="card accent-magenta"><h3>③ pgrx 框架</h3><p>解決 C extension 的痛點:ABI、_PG_init、型別對映,一個 cargo command 全包</p></div>
+      <div class="card accent-magenta"><h3>④ Memory Model</h3><p>palloc + MemoryContext × Rust ownership,pgrx 怎麼接合</p></div>
+      <div class="card accent-amber"><h3>⑤ Trade-offs</h3><p>用 pgrx 寫 extension 的收益與痛點,什麼時候不適合</p></div>
+      <div class="card accent-amber"><h3>⑥ redis_fdw_rs</h3><p>FDW 即「結構化 hook」,架構拆解 + live demo</p></div>
+    </div>
+
+  </div>
+  <div class="chrome-bot"><span class="l">// six sections, one demo</span><span class="r">six sections</span></div>
+</section>
+
+<!-- ============== SECTION 1 · SQL EXECUTION ============== -->
+<section class="slide section-slide" id="s03">
+  <div class="chrome-top"><span class="l">section.01</span><span class="r page-no"></span></div>
+  <div class="slide-content">
+    <span class="sec-num reveal">SECTION 01</span>
+    <h2 class="sec-title reveal">SQL Query 在 <span class="accent">PostgreSQL</span> 裡<br>到底經歷了什麼?</h2>
+    <p class="sec-desc reveal"></p>
+  </div>
+  <div class="chrome-bot"><span class="l">parser · analyzer · rewriter · planner · executor</span><span class="r">▌</span></div>
+</section>
+
+<!-- ============== SLIDE 04 · 五階段管線 ============== -->
+<section class="slide" id="s04">
+  <div class="chrome-top"><span class="l">pipeline.overview</span><span class="r page-no"></span></div>
+  <div class="slide-content">
+    <div class="slide-header reveal"><span class="num">// 1.1</span><h2>SQL 執行的五個階段</h2></div>
+    <div class="pipeline reveal">
+      <div class="pipeline-step"><span class="num">01</span>Parser<br><span class="mono" style="font-size:0.7em;color:var(--text-mute)">raw_parser()</span></div>
+      <div class="pipeline-arrow">▸</div>
+      <div class="pipeline-step"><span class="num">02</span>Analyzer<br><span class="mono" style="font-size:0.7em;color:var(--text-mute)">parse_analyze()</span></div>
+      <div class="pipeline-arrow">▸</div>
+      <div class="pipeline-step"><span class="num">03</span>Rewriter<br><span class="mono" style="font-size:0.7em;color:var(--text-mute)">QueryRewrite()</span></div>
+      <div class="pipeline-arrow">▸</div>
+      <div class="pipeline-step hook"><span class="num">04 · HOOK</span>Planner<br><span class="mono" style="font-size:0.7em;color:var(--text-mute)">planner_hook</span></div>
+      <div class="pipeline-arrow">▸</div>
+      <div class="pipeline-step hook"><span class="num">05 · HOOK</span>Executor<br><span class="mono" style="font-size:0.7em;color:var(--text-mute)">ExecutorStart_hook</span></div>
+    </div>
+    <div class="grid-2 reveal" style="margin-top:0.5rem">
+      <div class="card accent-cyan">
+        <h3>輸入 → 結構化</h3>
+        <ul class="bullet">
+          <li><strong>Parser</strong>: 純語法,把字串變 <span class="inline-code">RawStmt</span> 樹</li>
+          <li><strong>Analyzer</strong>: 語意檢查,綁定 catalog → <span class="inline-code">Query</span></li>
+          <li><strong>Rewriter</strong>: 套 rule / view,可能變多個 Query</li>
+        </ul>
+      </div>
+      <div class="card accent-magenta">
+        <h3>規劃 → 執行</h3>
+        <ul class="bullet">
+          <li><strong>Planner</strong>: cost-based 選 join / scan,輸出 <span class="inline-code">PlannedStmt</span></li>
+          <li><strong>Executor</strong>: Start / Run / Finish / End 四步走</li>
+          <li>後兩階段是 <span class="magenta">hook 的主戰場</span></li>
+        </ul>
+      </div>
+    </div>
+    <div class="takeaway reveal">五個階段裡 Parser / Analyzer / Rewriter 屬於核心不開放,Planner 與 Executor 才有 hook;下一張把整個 exec_simple_query 的 13 個呼叫攤開看,hook 點都掛在這條呼叫鏈上。</div>
+  </div>
+  <div class="chrome-bot"><span class="l">// from text to tuples</span><span class="r">five stages, two hookable</span></div>
+</section>
+
+
+<!-- ============== SLIDE 05b · exec_simple_query 呼叫序 (moved to follow 1.1) ============== -->
+<section class="slide" id="s05b">
+  <div class="chrome-top"><span class="l">stage.call-sequence</span><span class="r page-no"></span></div>
+  <div class="slide-content">
+    <div class="slide-header reveal"><span class="num">// 1.2</span><h2>從 <span class="accent">exec_simple_query</span> 看完整呼叫序</h2></div>
+    <div class="reveal" style="display:grid; grid-template-columns: 1.6fr 1fr; gap: 1rem; align-items:stretch; flex:1; min-height:0">
+      <div style="display:flex; align-items:center; justify-content:center; background: rgba(230,247,255,0.94); border:1px solid var(--rule-strong); border-radius:12px; padding:0.6rem; min-height:0">
+        <img src="assets/exec-simple-query-flow.png" alt="exec_simple_query 13 步呼叫流程" style="max-width:100%; max-height:62vh; width:auto; object-fit:contain;">
+      </div>
+      <div class="flex-col" style="gap:0.5rem">
+        <div class="card accent-cyan">
+          <h3>四階段、13 個 invoke</h3>
+          <ul class="bullet" style="font-size:0.92em">
+            <li><strong class="cyan">Parser</strong> (1–4), <span class="inline-code">pg_parse_query</span> → <span class="inline-code">raw_parser</span> → Bison/Flex → <span class="inline-code">List&lt;RawStmt&gt;</span></li>
+            <li><strong class="cyan">Analyze + Rewrite</strong> (5–10), <span class="inline-code">pg_analyze_and_rewrite</span> 內部再呼叫 <span class="inline-code">parse_analyze</span> 與 <span class="inline-code">pg_rewrite_query</span></li>
+            <li><strong class="magenta">Planner</strong> (11–12), <span class="inline-code">pg_plan_queries</span> 回 <span class="inline-code">PlannedStmt</span> <span class="magenta">planner_hook</span></li>
+            <li><strong class="magenta">Executor</strong> (13), <span class="inline-code">PortalRun</span> → <span class="inline-code">ProcessQuery</span> → <span class="inline-code">ExecutorStart/Run/End</span> <span class="magenta">executor hooks</span></li>
+          </ul>
+        </div>
+        <div class="card accent-magenta">
+          <h3>怎麼看這張圖</h3>
+          <p style="font-size:0.92em"><strong>exec_simple_query</strong> 是 query 處理的進入點,把 SQL 字串依序送進 parser、analyzer、planner、executor 四個階段。Parser 與 analyzer 階段 PG 視為核心不開放;<strong class="magenta">planner 與 executor 對應的呼叫</strong>則透過全域函式指標(<span class="inline-code">planner_hook</span> 等)讓 extension 可在 <span class="inline-code">_PG_init</span> 替換,後面幾頁會展開。</p>
+        </div>
+      </div>
+    </div>
+    <div class="takeaway reveal">這張呼叫圖在後面討論 hook、寫 extension 時會反覆用到;接下來逐一放大每個階段,先從第一站 Parser 看 SQL 字串怎麼變成 AST。</div>
+  </div>
+  <div class="chrome-bot"><span class="l">// 13 invokes, 4 stages</span><span class="r">hooks live on the arrows</span></div>
+</section>
+
+
+<!-- ============== SLIDE 04b · Parser 內部:Bison grammar ============== -->
+<section class="slide" id="s04b">
+  <div class="chrome-top"><span class="l">stage.parser-internals</span><span class="r page-no"></span></div>
+  <div class="slide-content">
+    <div class="slide-header reveal"><span class="num">// 1.3</span><h2>放大看 Parser — <span class="accent">SQL 字串怎麼變成 AST</span></h2></div>
+    <div class="reveal" style="display:grid; grid-template-columns: 1.85fr 1fr; gap:1rem; align-items:stretch; flex:1; min-height:0">
+      <div style="display:flex; align-items:center; justify-content:center; background:#0d0d0d; border:1px solid var(--rule-strong); border-radius:10px; padding:0.3rem; min-height:0; overflow:hidden">
+        <img src="assets/parser-bison-grammar.png" alt="PostgreSQL gram.y — InsertStmt 與 insert_rest Bison 規則,搭配 INSERT INTO public.t1 範例 SQL" style="width:100%; height:auto; max-height:78vh; object-fit:contain;">
+      </div>
+      <div class="flex-col" style="gap:0.5rem">
+        <div class="card accent-cyan" style="padding:0.7rem 1rem">
+          <h3 style="margin-bottom:0.3rem">這張圖在看什麼?</h3>
+          <p style="font-size:0.9em">左半是 <span class="inline-code">src/backend/parser/gram.y</span> 的 <strong>InsertStmt</strong> 文法規則;右半是 <strong>insert_rest</strong> 的子規則(處理 <span class="inline-code">SelectStmt</span> / <span class="inline-code">OVERRIDING</span> / 欄位列表)。下方是真正會被解析的 SQL。</p>
+        </div>
+        <div class="card accent-magenta" style="padding:0.7rem 1rem">
+          <h3 style="margin-bottom:0.3rem">Bison 規則 = AST 建構器</h3>
+          <p style="font-size:0.9em">每條規則右邊的 <span class="inline-code">{ $$ = makeNode(InsertStmt); $5->relation = $4; ... }</span> 就是「<strong class="cyan">語法 match 成功時要建哪個 Node、怎麼填欄位</strong>」。<span class="inline-code">$N</span> 對應規則第 N 個 token / sub-rule。</p>
+        </div>
+        <div class="card accent-amber" style="padding:0.7rem 1rem">
+          <h3 style="margin-bottom:0.3rem">範例 SQL 對到哪些規則</h3>
+          <div class="code" style="font-size:0.78em; padding:0.5rem 0.7rem">INSERT INTO public.t1
+  (time, id, cpu, temperature)
+SELECT now(), random()*1e8+1, random(), ...;</div>
+          <ul class="bullet" style="font-size:0.86em; margin-top:0.3rem">
+            <li><span class="inline-code">INSERT INTO insert_target</span> → 對到第一條規則</li>
+            <li><span class="inline-code">(time, id, ...)</span> → <span class="inline-code">'(' insert_column_list ')'</span></li>
+            <li><span class="inline-code">SELECT ...</span> → <span class="inline-code">SelectStmt</span>(遞迴解析)</li>
+            <li>整段最後產出 <strong>一棵 <span class="inline-code">InsertStmt</span> Node 樹</strong> 給 analyzer</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+    <div class="takeaway reveal">Parser 只負責 match 規則 + makeNode,不查 catalog、不檢查型別。catalog 與型別檢查由下一階段 Analyzer 處理。</div>
+  </div>
+  <div class="chrome-bot"><span class="l">// gram.y · Bison/Flex · makeNode</span><span class="r">SQL → AST, no catalog lookup</span></div>
+</section>
+
+<!-- ============== SLIDE 05 · Parser & Analyzer ============== -->
+<section class="slide" id="s05">
+  <div class="chrome-top"><span class="l">stage.parser-analyzer</span><span class="r page-no"></span></div>
+  <div class="slide-content">
+    <div class="slide-header reveal"><span class="num">// 1.4</span><h2>Parser & Analyzer — 從字串到 <span class="accent">Query</span></h2></div>
+    <div class="grid-2 reveal">
+      <div class="card accent-cyan">
+        <h3>Parser (Bison/Flex)</h3>
+        <p><strong>輸入:</strong> SQL 字串<br><strong>輸出:</strong> <span class="inline-code">List&lt;RawStmt&gt;</span></p>
+        <ul class="bullet" style="margin-top:0.5rem">
+          <li>純語法檢查,不看 catalog</li>
+          <li>不知道 <span class="inline-code">users</span> 這張表是否存在</li>
+          <li>程式碼: <span class="mono cyan">src/backend/parser/gram.y</span></li>
+        </ul>
+      </div>
+      <div class="card accent-cyan">
+        <h3>Analyzer (Semantic)</h3>
+        <p><strong>輸入:</strong> <span class="inline-code">RawStmt</span><br><strong>輸出:</strong> <span class="inline-code">Query</span> (帶 oid)</p>
+        <ul class="bullet" style="margin-top:0.5rem">
+          <li>查 catalog 確認 table / column 存在</li>
+          <li>解析型別、決定運算子</li>
+          <li>檢查權限 (ACL)</li>
+        </ul>
+      </div>
+    </div>
+    <div class="code with-dots reveal" style="margin-top:0.6rem"><span class="com">/* 簡化版的進入點 — src/backend/tcop/postgres.c */</span>
+<span class="kw">List</span> *parsetree_list = <span class="fn">pg_parse_query</span>(query_string);
+<span class="kw">foreach</span>(parsetree_item, parsetree_list) {
+    <span class="kw">List</span> *querytree_list = <span class="fn">pg_analyze_and_rewrite</span>(parsetree, ...);
+    <span class="kw">PlannedStmt</span> *plan = <span class="fn">pg_plan_queries</span>(querytree_list, ...);  <span class="com">// ← planner_hook 在這</span>
+    <span class="fn">PortalStart</span>(portal, ...);  <span class="com">// ← ExecutorStart_hook 在這</span>
+    <span class="fn">PortalRun</span>(portal, ...);    <span class="com">// ← ExecutorRun_hook 在這</span>
+}</div>
+    <div class="takeaway reveal">Parser 只看語法、Analyzer 才查 catalog;Parser/Analyzer/Rewriter 屬於核心不開放,接下來進可被 hook 的階段, 從 ExecutorStart / Run / End 看執行階段內部是怎麼跑的。</div>
+  </div>
+  <div class="chrome-bot"><span class="l">// gram.y → RawStmt → Query</span><span class="r">analyzer 之後才有 oid</span></div>
+</section>
+
+<!-- ============== SLIDE 07 · Executor ============== -->
+<section class="slide" id="s07">
+  <div class="chrome-top"><span class="l">stage.executor</span><span class="r page-no"></span></div>
+  <div class="slide-content">
+    <div class="slide-header reveal"><span class="num">// 1.5</span><h2>Executor — 四個生命週期 hook</h2></div>
+    <div class="pipeline reveal">
+      <div class="pipeline-step hook"><span class="num">EXEC · 01</span>ExecutorStart<br><span class="mono" style="font-size:0.7em;color:var(--text-mute)">init state</span></div>
+      <div class="pipeline-arrow">▸</div>
+      <div class="pipeline-step hook"><span class="num">EXEC · 02</span>ExecutorRun<br><span class="mono" style="font-size:0.7em;color:var(--text-mute)">fetch tuples</span></div>
+      <div class="pipeline-arrow">▸</div>
+      <div class="pipeline-step hook"><span class="num">EXEC · 03</span>ExecutorFinish<br><span class="mono" style="font-size:0.7em;color:var(--text-mute)">after-trigger</span></div>
+      <div class="pipeline-arrow">▸</div>
+      <div class="pipeline-step hook"><span class="num">EXEC · 04</span>ExecutorEnd<br><span class="mono" style="font-size:0.7em;color:var(--text-mute)">cleanup</span></div>
+    </div>
+    <div class="grid-2 reveal" style="margin-top:0.6rem">
+      <div class="card accent-cyan">
+        <h3>四個階段做什麼</h3>
+        <ul class="bullet">
+          <li><strong>Start</strong>: 建 <span class="inline-code">EState</span>、開 portal、檢查權限</li>
+          <li><strong>Run</strong>: <span class="inline-code">ExecProcNode()</span> 拉 tuple,真正幹活</li>
+          <li><strong>Finish</strong>: AFTER trigger / constraint</li>
+          <li><strong>End</strong>: 釋放資源,關閉 plan tree</li>
+        </ul>
+      </div>
+      <div class="card accent-magenta">
+        <h3>實戰應用</h3>
+        <ul class="bullet">
+          <li><strong>pg_stat_statements</strong>: 在 Start 記 query,在 End 算 cost</li>
+          <li><strong>pg_audit</strong>: Start 時記錄 audit log</li>
+          <li><strong>pg_track_settings</strong>: 監聽參數變化</li>
+          <li>觀察/監控類 extension 主要依賴這四個</li>
+        </ul>
+      </div>
+    </div>
+    <div class="takeaway reveal">四個生命週期裡 Start / Run / End 幾乎所有 query 都會走,Finish 只在 DML + AFTER trigger 時觸發;接下來逐一拆解這幾個階段裡到底發生什麼。</div>
+  </div>
+  <div class="chrome-bot"><span class="l">// init → run → finish → end</span><span class="r">每個都是 function pointer</span></div>
+</section>
+
+<!-- ============== SLIDE 07b · ExecutorStart 細節 ============== -->
+<section class="slide" id="s07b">
+  <div class="chrome-top"><span class="l">stage.executor-start</span><span class="r page-no"></span></div>
+  <div class="slide-content">
+    <div class="slide-header reveal"><span class="num">// 1.5.1</span><h2><span class="accent">ExecutorStart</span> 裡到底做了什麼?</h2></div>
+    <div class="reveal" style="display:grid; grid-template-columns: 1.3fr 1fr; gap: 1rem; align-items:stretch; flex:1; min-height:0">
+      <div style="display:flex; align-items:center; justify-content:center; background:linear-gradient(180deg,#0a0f1c,#060b18); border:1px solid var(--rule-strong); border-radius:12px; padding:0.6rem; min-height:0">
+        <img src="assets/executor-start-flow.png" alt="ExecutorStart 遞迴包裝 plan tree 範例" style="max-width:100%; max-height:64vh; width:auto; object-fit:contain;">
+      </div>
+      <div class="flex-col" style="gap:0.5rem">
+        <div class="card accent-cyan">
+          <h3>兩件事</h3>
+          <ol class="steps">
+            <li><strong>建 EState</strong>, 一次 query 的執行上下文 (snapshot、memory context、parameters、tuple slot)</li>
+            <li><strong>遞迴包裝 Plan tree</strong>, 每個 PlanNode 用 <span class="inline-code">ExecInitNode()</span> 變成對應的 <span class="inline-code">PlanState</span></li>
+          </ol>
+        </div>
+        <div class="card accent-magenta">
+          <h3>左圖讀法</h3>
+          <p style="font-size:0.92em">範例 query <span class="inline-code">SELECT * FROM t1 WHERE id&lt;3 ORDER BY id LIMIT 2</span> 的 plan tree 是「Limit → IndexScan」。<strong>ExecutorStart 從上往下遞迴</strong>,每個節點都呼一次 <span class="inline-code">ExecInitNode</span>,分派到對應的 <span class="inline-code">ExecInitLimit</span> / <span class="inline-code">ExecInitIndexScan</span>。EXPLAIN 的縮排深度 = 這個遞迴深度。</p>
+        </div>
+        <div class="card accent-amber">
+          <h3>PlanNode → ExecInit* 對照</h3>
+          <table style="margin-top:0.2rem;font-size:0.82em">
+            <thead><tr><th>Plan</th><th>ExecInit*</th></tr></thead>
+            <tbody>
+              <tr><td>Limit</td><td>ExecInitLimit</td></tr>
+              <tr><td>Sort</td><td>ExecInitSort</td></tr>
+              <tr><td>IndexScan</td><td>ExecInitIndexScan</td></tr>
+              <tr><td>SeqScan</td><td>ExecInitSeqScan</td></tr>
+              <tr><td>HashJoin</td><td>ExecInitHashJoin</td></tr>
+              <tr><td>ForeignScan</td><td class="cyan">ExecInitForeignScan ← FDW</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+    <div class="takeaway reveal">每種 plan node 都有自己的 ExecInit* 與 Exec*;ExecutorStart 在這裡組裝整棵 state tree,讓後續 Run 階段可以一筆一筆拉 tuple。</div>
+  </div>
+  <div class="chrome-bot"><span class="l">// EState + ExecInitNode recursion</span><span class="r">plan tree mirrored to state tree</span></div>
+</section>
+
+<!-- ============== SLIDE 07c2 · PlanState + ExecProcNodeMtd ============== -->
+<section class="slide" id="s07c2">
+  <div class="chrome-top"><span class="l">stage.executor-run.planstate</span><span class="r page-no"></span></div>
+  <div class="slide-content">
+    <div class="slide-header reveal"><span class="num">// 1.5.2</span><h2><span class="accent">PlanState</span> 上的兩個函式指標</h2></div>
+    <div class="reveal" style="display:grid; grid-template-columns: 1.35fr 1fr; gap:1rem; align-items:stretch; flex:1; min-height:0">
+      <div style="display:flex; align-items:center; justify-content:center; background:#0d0d0d; border:1px solid var(--rule-strong); border-radius:10px; padding:0.5rem; min-height:0; overflow:hidden">
+        <img src="assets/planstate-execprocnode.png" alt="PlanState struct: ExecProcNode wrapper + ExecProcNodeReal; ExecProcNodeMtd typedef returns next TupleTableSlot" style="width:100%; height:auto; max-height:74vh; object-fit:contain; border-radius:6px;">
+      </div>
+      <div class="flex-col" style="gap:0.55rem">
+        <div class="card accent-cyan" style="padding:0.65rem 0.95rem">
+          <h3 style="margin-bottom:0.25rem; font-size:0.98em">每個節點兩個函式指標</h3>
+          <ul class="bullet" style="font-size:0.86em">
+            <li><span class="inline-code">ExecProcNode</span>:wrapper, 呼叫 <span class="inline-code">ExecProcNodeReal</span> 拉 tuple,並在前後做計時、累計 rows / loops, 也就是 <strong>EXPLAIN ANALYZE</strong> 看到的數字來源</li>
+            <li><span class="inline-code">ExecProcNodeReal</span>:節點實際取下一筆 tuple 的實作(SeqScan / IndexScan / HashJoin...)</li>
+            <li>沒開 ANALYZE 時 wrapper 會被換成精簡版(<span class="inline-code">ExecProcNodeInstr</span> 或直接 ExecProcNodeReal),不付量測 overhead</li>
+          </ul>
+        </div>
+        <div class="card accent-magenta" style="padding:0.65rem 0.95rem">
+          <h3 style="margin-bottom:0.25rem; font-size:0.98em">ExecProcNodeMtd 簽章</h3>
+          <p style="font-size:0.86em">每個節點實作成 <span class="inline-code">TupleTableSlot *(*)(PlanState *)</span>:回下一筆 tuple,沒有更多時回 NULL 或空 slot, 這是 volcano model 的核心 contract。</p>
+        </div>
+        <div class="card accent-amber" style="padding:0.65rem 0.95rem">
+          <h3 style="margin-bottom:0.25rem; font-size:0.98em">為什麼是兩層?</h3>
+          <p style="font-size:0.86em">Wrapper / Real 拆兩層讓 instrument hook、JIT、parallel worker 等功能可以攔在 wrapper 上,核心節點實作完全不用知道誰在量它,職責分離。</p>
+        </div>
+      </div>
+    </div>
+    <div class="takeaway reveal">這張先看「裝好之後長什麼樣」, PlanState 上有兩個欄位:wrapper 處理 instrumentation,real 處理拉 tuple, 下一張看 ExecutorStart 怎麼把這兩個欄位填進去。</div>
+  </div>
+  <div class="chrome-bot"><span class="l">// PlanState · ExecProcNode wrapper · ExecProcNodeReal</span><span class="r">two function pointers per node</span></div>
+</section>
+
+<!-- ============== SLIDE 07b2 · ExecSetExecProcNode ============== -->
+<section class="slide" id="s07b2">
+  <div class="chrome-top"><span class="l">stage.executor-start.set-procnode</span><span class="r page-no"></span></div>
+  <div class="slide-content">
+    <div class="slide-header reveal"><span class="num">// 1.5.3</span><h2><span class="accent">ExecutorStart</span> 怎麼把 function pointer 設好的?</h2></div>
+    <div class="reveal" style="display:grid; grid-template-columns: 1.45fr 1fr; gap:1rem; align-items:stretch; flex:1; min-height:0">
+      <div style="display:flex; align-items:center; justify-content:center; background:#0d0d0d; border:1px solid var(--rule-strong); border-radius:10px; padding:0.5rem; min-height:0; overflow:hidden">
+        <img src="assets/exec-set-procnode.png" alt="ExecSetExecProcNode 把 ExecProcNodeReal 設成節點實作、ExecProcNode 設成 ExecProcNodeFirst wrapper;ExecInitNode switch 依 NodeTag 分派到 ExecInitCustomScan / ExecInitNestLoop / ExecInitMergeJoin" style="width:100%; height:auto; max-height:74vh; object-fit:contain; border-radius:6px;">
+      </div>
+      <div class="flex-col" style="gap:0.55rem">
+        <div class="card accent-cyan" style="padding:0.65rem 0.95rem">
+          <h3 style="margin-bottom:0.25rem; font-size:0.98em">兩步流程</h3>
+          <ol class="steps" style="font-size:0.86em">
+            <li><span class="inline-code">ExecInitNode</span> 用 switch 看 <span class="inline-code">NodeTag</span>,呼對應的 <span class="inline-code">ExecInit*</span>(SeqScan / NestLoop / MergeJoin / CustomScan, ...)。</li>
+            <li><span class="inline-code">ExecInit*</span> 內部呼 <span class="inline-code">ExecSetExecProcNode</span>,把節點的 next-tuple 函式 <strong>裝到 PlanState 上</strong>。</li>
+          </ol>
+        </div>
+        <div class="card accent-magenta" style="padding:0.65rem 0.95rem">
+          <h3 style="margin-bottom:0.25rem; font-size:0.98em">ExecSetExecProcNode 做什麼</h3>
+          <p style="font-size:0.86em">把使用者傳進來的 <span class="inline-code">function</span>(節點實作)分別存到兩個欄位:</p>
+          <ul class="bullet" style="font-size:0.85em; margin-top:0.3rem">
+            <li><span class="inline-code">node-&gt;ExecProcNodeReal = function</span>, 真正取下一筆 tuple</li>
+            <li><span class="inline-code">node-&gt;ExecProcNode = ExecProcNodeFirst</span>, 第一次呼叫的 wrapper,負責檢查 stack depth、可能加上 instrumentation</li>
+          </ul>
+        </div>
+        <div class="card accent-amber" style="padding:0.65rem 0.95rem">
+          <h3 style="margin-bottom:0.25rem; font-size:0.98em">為什麼第一次特別?</h3>
+          <p style="font-size:0.86em">註解寫得清楚:第一次執行時 wrapper 才需要做 stack-depth 檢查、initialize instrumentation;之後 ExecProcNode 會被換成更簡單的版本(<span class="inline-code">ExecProcNodeInstr</span> 或直接 ExecProcNodeReal),減少每 tuple 的 overhead。</p>
+        </div>
+        <div class="card" style="padding:0.65rem 0.95rem; border-left:3px solid #c8a8ff">
+          <h3 style="margin-bottom:0.25rem; font-size:0.98em">和 hook 的關係</h3>
+          <p style="font-size:0.86em">這就是 <strong>function pointer dispatch</strong> 的範例:plan tree 中每種 node type 對應一個 init 函式,init 內把實際取 tuple 的邏輯掛到 PlanState 上。Custom Scan / FDW 的 hook 機制,就是延續這個 pattern, 自己提供一組 ExecProcNode 實作。</p>
+        </div>
+      </div>
+    </div>
+    <div class="takeaway reveal">ExecutorStart 的核心動作是「對每個節點呼 ExecInit\*,把對應的 next-tuple function 裝進 PlanState」, 之後 ExecutorRun 就只是反覆呼這些 function pointer。</div>
+  </div>
+  <div class="chrome-bot"><span class="l">// ExecInitNode switch · ExecSetExecProcNode</span><span class="r">function pointer dispatch</span></div>
+</section>
+
+<!-- ============== SLIDE 07c3 · ExecutePlan for-loop ============== -->
+<section class="slide" id="s07c3">
+  <div class="chrome-top"><span class="l">stage.executor-run.executeplan</span><span class="r page-no"></span></div>
+  <div class="slide-content">
+    <div class="slide-header reveal"><span class="num">// 1.5.4</span><h2><span class="accent">ExecutePlan</span> 的 for(;;) 主迴圈</h2></div>
+    <div class="reveal" style="display:grid; grid-template-columns: 1.35fr 1fr; gap:1rem; align-items:stretch; flex:1; min-height:0">
+      <div style="display:flex; align-items:center; justify-content:center; background:#0d0d0d; border:1px solid var(--rule-strong); border-radius:10px; padding:0.5rem; min-height:0; overflow:hidden">
+        <img src="assets/executeplan-loop.png" alt="ExecutePlan for-loop: ResetPerTupleExprContext, ExecProcNode, TupIsNull break, junk filter" style="width:100%; height:auto; max-height:74vh; object-fit:contain; border-radius:6px;">
+      </div>
+      <div class="flex-col" style="gap:0.55rem">
+        <div class="card accent-cyan" style="padding:0.65rem 0.95rem">
+          <h3 style="margin-bottom:0.25rem; font-size:0.98em">迴圈四步</h3>
+          <ol class="steps" style="font-size:0.86em">
+            <li><span class="inline-code">ResetPerTupleExprContext(estate)</span>:釋放上一輪 expression 暫存</li>
+            <li><span class="inline-code">slot = ExecProcNode(planstate)</span>:從根節點拉下一筆 tuple</li>
+            <li><span class="inline-code">if (TupIsNull(slot)) break</span>:沒有 tuple 就結束</li>
+            <li>有 junk filter, 投影出乾淨 tuple 給 client</li>
+          </ol>
+        </div>
+        <div class="card accent-magenta" style="padding:0.65rem 0.95rem">
+          <h3 style="margin-bottom:0.25rem; font-size:0.98em">PerTupleMemoryContext 的角色</h3>
+          <p style="font-size:0.86em">每圈先 reset 一次 per-tuple memory context,expression evaluation 期間 palloc 出來的暫存自動清掉,不需逐筆 pfree, 跟前面 MemoryContext 章節的設計呼應。</p>
+        </div>
+        <div class="card accent-amber" style="padding:0.65rem 0.95rem">
+          <h3 style="margin-bottom:0.25rem; font-size:0.98em">ExecutorRun 的本體</h3>
+          <p style="font-size:0.86em">ExecutorRun 不直接走 plan tree, 它只反覆呼 ExecProcNode,讓 plan tree 自己以 pull-based 方式從根遞迴到葉子,每次取一筆 tuple。</p>
+        </div>
+      </div>
+    </div>
+    <div class="takeaway reveal">ExecutorRun 的本體只有兩件事:每圈 reset per-tuple context、然後呼根節點的 ExecProcNode;其他複雜度都封裝在 PlanState 的函式指標裡。</div>
+  </div>
+  <div class="chrome-bot"><span class="l">// for(;;) · reset · ExecProcNode · TupIsNull</span><span class="r">tuple-by-tuple loop</span></div>
+</section>
+
+<!-- ============== SLIDE 07c · ExecutorRun ============== -->
+<section class="slide" id="s07c">
+  <div class="chrome-top"><span class="l">stage.executor-run</span><span class="r page-no"></span></div>
+  <div class="slide-content">
+    <div class="slide-header reveal"><span class="num">// 1.5.5</span><h2><span class="accent">ExecutorRun</span> — Volcano model 拉 tuple</h2></div>
+    <div class="reveal" style="display:grid; grid-template-columns: 1.55fr 1fr; gap:1rem; align-items:stretch; flex:1; min-height:0">
+      <div style="display:flex; align-items:center; justify-content:center; background:linear-gradient(180deg,#0a0f1c,#060b18); border:1px solid var(--rule-strong); border-radius:12px; padding:0.5rem; min-height:0; overflow:hidden">
+        <img src="assets/executor-volcano-workflow.png" alt="ExecutorRun volcano model: Project → Unique → Sort → Nestloop Join → Index Scan(s), GetNext 下行 / Tuple 上行" style="width:auto; height:auto; max-width:100%; max-height:72vh; object-fit:contain;">
+      </div>
+      <div class="flex-col" style="gap:0.55rem">
+        <div class="card accent-cyan" style="padding:0.65rem 0.95rem">
+          <h3 style="margin-bottom:0.2rem; font-size:0.95em">主迴圈在 ExecutePlan</h3>
+          <p style="font-size:0.85em"><span class="inline-code">for(;;)</span> 反覆呼 <span class="inline-code">ExecProcNode(planstate)</span>;每圈先 <span class="inline-code">ResetPerTupleExprContext</span> 釋放上一輪暫存,拿到 NULL tuple 就結束。</p>
+        </div>
+        <div class="card accent-magenta" style="padding:0.65rem 0.95rem">
+          <h3 style="margin-bottom:0.2rem; font-size:0.95em">Volcano / Pull model</h3>
+          <p style="font-size:0.85em">每個 PlanState 透過 <span class="inline-code">ExecProcNode</span> 向下層拉一筆 tuple。Limit → Sort → SeqScan/IndexScan 一層層 <strong class="cyan">GetNext</strong>,一筆 tuple 從葉子回到根節點。</p>
+        </div>
+        <div class="card accent-amber" style="padding:0.65rem 0.95rem">
+          <h3 style="margin-bottom:0.2rem; font-size:0.95em">PlanState 上的兩個函式指標</h3>
+          <p style="font-size:0.85em"><span class="inline-code">ExecProcNode</span> 是 wrapper(可帶 <span class="inline-code">Instrumentation</span>);<span class="inline-code">ExecProcNodeReal</span> 是該節點實際的 next-tuple 實作。包裝層讓 EXPLAIN ANALYZE 能在不改節點程式碼下測量每節點 cost。</p>
+        </div>
+      </div>
+    </div>
+    <div class="takeaway reveal">把前幾張串起來:ExecutePlan 的 for-loop 反覆呼 ExecProcNode,plan tree 從根往葉 pull 一筆 tuple、再層層 return 回 client, 這就是 volcano model。下一張看 query 結束時 ExecutorEnd 怎麼把這棵 state tree 拆掉。</div>
+  </div>
+  <div class="chrome-bot"><span class="l">// for(;;) ExecProcNode</span><span class="r">volcano: pull next tuple</span></div>
+</section>
+
+<!-- ============== SLIDE 07d · ExecutorEnd ============== -->
+<section class="slide" id="s07d">
+  <div class="chrome-top"><span class="l">stage.executor-end</span><span class="r page-no"></span></div>
+  <div class="slide-content">
+    <div class="slide-header reveal"><span class="num">// 1.5.6</span><h2><span class="accent">ExecutorEnd</span> — 反向遞迴釋放資源</h2></div>
+    <div class="reveal" style="display:grid; grid-template-columns: 1.2fr 1fr; gap:1rem; align-items:stretch; flex:1; min-height:0">
+      <div style="display:flex; align-items:center; justify-content:center; background:linear-gradient(180deg,#0a0f1c,#060b18); border:1px solid var(--rule-strong); border-radius:12px; padding:0.5rem; min-height:0; overflow:auto">
+        <div class="mermaid" style="width:100%; max-height:72vh; text-align:center; color:#e6f7ff">
+flowchart TD
+  EE["ExecutorEnd"]
+  EPL["ExecEndPlan"]
+  EN1["ExecEndNode (root)"]
+  L["ExecEndLimit"]
+  EN2["ExecEndNode"]
+  S["ExecEndSort"]
+  EN3["ExecEndNode"]
+  SS["ExecEndSeqScan"]
+  FREE["FreeExecutorState<br/>(drops EState + tuple slots)"]
+
+  EE --> EPL --> EN1 --> L --> EN2 --> S --> EN3 --> SS
+  SS --> FREE
+
+  style EE   fill:#0d3a52,stroke:#5cf0ff,stroke-width:2px,color:#e6f7ff
+  style EPL  fill:#0d3a25,stroke:#7df0a0,color:#e8ffe9
+  style EN1  fill:#0d3a25,stroke:#7df0a0,color:#e8ffe9
+  style EN2  fill:#0d3a25,stroke:#7df0a0,color:#e8ffe9
+  style EN3  fill:#0d3a25,stroke:#7df0a0,color:#e8ffe9
+  style L    fill:#3d2a08,stroke:#ffb547,color:#fff4e1
+  style S    fill:#3d2a08,stroke:#ffb547,color:#fff4e1
+  style SS   fill:#3d2a08,stroke:#ffb547,color:#fff4e1
+  style FREE fill:#2a0d3d,stroke:#c8a8ff,stroke-width:2px,color:#f3e5f5
+        </div>
+      </div>
+      <div class="flex-col" style="gap:0.55rem">
+        <div class="card accent-cyan" style="padding:0.65rem 0.95rem">
+          <h3 style="margin-bottom:0.2rem; font-size:0.95em">與 Start 對稱</h3>
+          <p style="font-size:0.85em"><span class="inline-code">ExecutorStart</span> 用 <span class="inline-code">ExecInitNode</span> 從根遞迴下去把 plan tree 包成 PlanState tree;<span class="inline-code">ExecutorEnd</span> 用 <span class="inline-code">ExecEndNode</span> 反向把它一層層釋放。</p>
+        </div>
+        <div class="card accent-magenta" style="padding:0.65rem 0.95rem">
+          <h3 style="margin-bottom:0.2rem; font-size:0.95em">每個節點各自清理</h3>
+          <p style="font-size:0.85em">不同節點型別有對應的 <span class="inline-code">ExecEnd*</span>:Limit / Sort / Hash / SeqScan / IndexScan / ForeignScan。FDW 在這裡呼叫 <span class="inline-code">EndForeignScan</span> 釋放連線、buffer。</p>
+        </div>
+        <div class="card accent-amber" style="padding:0.65rem 0.95rem">
+          <h3 style="margin-bottom:0.2rem; font-size:0.95em">FreeExecutorState 收尾</h3>
+          <p style="font-size:0.85em">遞迴結束後,<span class="inline-code">FreeExecutorState</span> 釋放 <span class="inline-code">EState</span>、tuple slots、ExprContext 等執行期物件。整段 query 的 ExecutorState memory context 被刪除。</p>
+        </div>
+      </div>
+    </div>
+    <div class="takeaway reveal">ExecutorEnd 是 Start 的對稱反向操作,每個節點依序呼自己的 ExecEnd*,確保連線、暫存、memory context 都正確歸還;§1 的執行器內部到此告一段落, 下一張看這套 hook 機制在 production 裡實際長什麼樣, 以 TimescaleDB 為例。</div>
+  </div>
+  <div class="chrome-bot"><span class="l">// reverse traversal · clean up state tree</span><span class="r">symmetric to ExecutorStart</span></div>
+</section>
+
+
+<!-- ============== SLIDE 08b · Hook 實戰:TimescaleDB ============== -->
+<section class="slide" id="s08b">
+  <div class="chrome-top"><span class="l">stage.hook-in-the-wild</span><span class="r page-no"></span></div>
+  <div class="slide-content">
+    <div class="slide-header reveal"><span class="num">// 1.6</span><h2>Hook 拿來做什麼? — <span class="accent">TimescaleDB</span> 實例</h2></div>
+    <div class="reveal" style="display:flex; flex-direction:column; gap:0.7rem; flex:1; min-height:0">
+      <div style="display:flex; align-items:center; justify-content:center; background:#0d0d0d; border:1px solid var(--rule-strong); border-radius:10px; padding:0.5rem; min-height:0; overflow:hidden">
+        <img src="assets/timescaledb-custom-scan.png" alt="TimescaleDB EXPLAIN ANALYZE 顯示 Custom Scan (HypertableInsert) → Insert → Custom Scan (ChunkDispatch)" style="width:auto; height:auto; max-width:100%; max-height:58vh; object-fit:contain;">
+      </div>
+      <div class="grid-3" style="gap:0.6rem">
+        <div class="card accent-cyan" style="padding:0.6rem 0.85rem">
+          <h3 style="margin-bottom:0.2rem; font-size:1em">EXPLAIN 讀法</h3>
+          <p style="font-size:0.88em; line-height:1.55">普通 INSERT 只會看到 <span class="inline-code">Insert on …</span>。TimescaleDB 包成兩層 Custom Scan:<strong class="cyan">HypertableInsert</strong> 在外層接 row、<strong class="cyan">ChunkDispatch</strong> 在內層分派到正確 time chunk。括號裡的 cost / rows / loops 跟內建節點一樣,planner 視為一級公民。</p>
+        </div>
+        <div class="card accent-magenta" style="padding:0.6rem 0.85rem">
+          <h3 style="margin-bottom:0.2rem; font-size:1em">TimescaleDB 用到的 hook</h3>
+          <ul class="bullet" style="font-size:0.86em; line-height:1.55">
+            <li><span class="inline-code">planner_hook</span>, 偵測 hypertable 改寫 plan</li>
+            <li><span class="inline-code">ProcessUtility_hook</span>, 攔 CREATE TABLE 自動建 chunk</li>
+            <li><span class="inline-code">CustomScan</span> API, 注入 HypertableInsert / ChunkDispatch / ChunkAppend</li>
+            <li><span class="inline-code">ExecutorStart_hook</span>, 收集統計與 per-chunk state</li>
+          </ul>
+        </div>
+        <div class="card" style="padding:0.6rem 0.85rem; border-left:3px solid #c8a8ff">
+          <h3 style="margin-bottom:0.2rem; font-size:1em">同模式的其他 extension</h3>
+          <ul class="bullet" style="font-size:0.86em; line-height:1.55">
+            <li><strong>Citus</strong>, 分散式 sharding;planner_hook 把 query 改寫成多 worker 子查詢</li>
+            <li><strong>pgvector (HNSW)</strong>, 用 Index Access Method 自訂索引</li>
+            <li><strong>ParadeDB</strong>, CustomScan + table AM 整合 BM25 全文檢索</li>
+            <li><strong>pg_hint_plan</strong>, planner_hook 改寫 join shape</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+    <div class="takeaway reveal">Hook 讓 extension 能在不修改核心的前提下擴充 PostgreSQL,EXPLAIN 中的 Custom Scan 就是 hook 的可見成果, 下一張用 planner_hook 看 hook 在 source code 裡實際長什麼樣。</div>
+  </div>
+  <div class="chrome-bot"><span class="l">// hooks in production · TimescaleDB</span><span class="r">EXPLAIN reveals it all</span></div>
+</section>
+
+<!-- ============== SLIDE 06 · Planner (moved here, after TimescaleDB example) ============== -->
+<section class="slide" id="s06">
+  <div class="chrome-top"><span class="l">stage.planner</span><span class="r page-no"></span></div>
+  <div class="slide-content">
+    <div class="slide-header reveal"><span class="num">// 1.7</span><h2>Planner hook 長什麼樣? — <span class="accent">標準寫法拆解</span></h2></div>
+    <div class="reveal" style="display:grid; grid-template-columns: 1.55fr 1fr; gap:1rem; align-items:stretch; flex:1; min-height:0">
+      <div style="display:flex; align-items:center; justify-content:center; background:#1e1e1e; border:1px solid var(--rule-strong); border-radius:10px; padding:0.5rem; min-height:0; overflow:hidden">
+        <img src="assets/planner-hook-source.png" alt="PostgreSQL src/backend/optimizer/plan/planner.c — planner() entry with planner_hook" style="width:100%; height:auto; max-height:72vh; object-fit:contain; border-radius:6px;">
+      </div>
+      <div class="flex-col" style="gap:0.5rem">
+        <div class="card accent-magenta" style="padding:0.55rem 0.9rem">
+          <h3 style="margin-bottom:0.15rem; font-size:0.9em">Hook 兩種類型</h3>
+          <ul class="bullet" style="font-size:0.78em; line-height:1.5">
+            <li><strong class="cyan">替換型</strong>(planner_hook、ProcessUtility_hook), 有 <span class="inline-code">standard_*()</span>;chain 結尾<strong>必須</strong>呼叫它,否則整段流程中斷</li>
+            <li><strong class="cyan">通知型</strong>(post_parse_analyze_hook), <strong>沒有</strong> standard 對應, PG 在<strong>標準流程跑完後</strong>才呼叫 hook,chain 結尾為 None 是正常的</li>
+          </ul>
+        </div>
+        <div class="card accent-magenta" style="padding:0.55rem 0.9rem">
+          <h3 style="margin-bottom:0.15rem; font-size:0.9em">planner_hook 是什麼?</h3>
+          <p style="font-size:0.8em">全域函式指標,預設指向 <span class="inline-code">standard_planner()</span>。Extension 在 <span class="inline-code">_PG_init()</span> 替換它,就能在每個 query 規劃時介入。</p>
+        </div>
+        <div class="card accent-cyan" style="padding:0.55rem 0.9rem">
+          <h3 style="margin-bottom:0.15rem; font-size:0.9em">常見用途</h3>
+          <ul class="bullet" style="font-size:0.8em; line-height:1.5">
+            <li><strong>auto_explain</strong>, 印出每個 plan</li>
+            <li><strong>pg_hint_plan</strong>, 注入 hint 改變 plan shape</li>
+            <li><strong>citus</strong>, 分散式 query 重寫</li>
+          </ul>
+        </div>
+        <div class="card accent-cyan" style="padding:0.55rem 0.9rem">
+          <h3 style="margin-bottom:0.15rem; font-size:0.9em">Extension 標準寫法(替換型)</h3>
+          <div class="code" style="font-size:0.7em; padding:0.45rem 0.65rem; margin-top:0.15rem"><span class="kw">static</span> <span class="fn">planner_hook_type</span> prev;
+<span class="kw">void</span> <span class="fn">_PG_init</span>() {
+  prev = planner_hook;
+  planner_hook = my_planner;
+}
+<span class="type">PlannedStmt</span> *<span class="fn">my_planner</span>(...) {
+  <span class="kw">return</span> prev ? prev(...)
+              : <span class="fn">standard_planner</span>(...);
+}</div>
+        </div>
+      </div>
+    </div>
+    <div class="takeaway reveal">Hook = 全域函式指標 + 責任鏈;<strong>替換型</strong>必須在 chain 結尾呼 <span class="inline-code">standard_*</span>,<strong>通知型</strong> chain 結尾 None 即可。接下來 §2 看一個 extension 從檔案結構到能掛在哪些面上。</div>
+  </div>
+  <div class="chrome-bot"><span class="l">// chain to previous hook, always</span><span class="r">不接 chain 就是無效操作</span></div>
+</section>
+
+<!-- ============== SECTION 2 · EXTENSION STRUCTURE ============== -->
+<section class="slide section-slide" id="s09">
+  <div class="chrome-top"><span class="l">section.02</span><span class="r page-no"></span></div>
+  <div class="slide-content">
+    <span class="sec-num reveal">SECTION 02</span>
+    <h2 class="sec-title reveal">PostgreSQL <span class="accent">Extension</span><br>到底是什麼東西?</h2>
+    <p class="sec-desc reveal">三個檔案、一個起點函式、N 個可掛點, 這就是擴充 PostgreSQL 的全部。</p>
+  </div>
+  <div class="chrome-bot"><span class="l">control · sql · so</span><span class="r">_PG_init() is your main()</span></div>
+</section>
+
+<!-- ============== SLIDE 10 · 三件套 ============== -->
+<section class="slide" id="s10">
+  <div class="chrome-top"><span class="l">extension.anatomy</span><span class="r page-no"></span></div>
+  <div class="slide-content">
+    <div class="slide-header reveal"><span class="num">// 2.1</span><h2>Extension = <span class="accent">三件套</span></h2></div>
+    <div class="grid-3 reveal">
+      <div class="card accent-cyan">
+        <h3>① .control</h3>
+        <p class="mono" style="font-size:0.85em;color:var(--text-mute)">my_ext.control</p>
+        <p style="margin-top:0.4rem">告訴 PostgreSQL「我是誰、版本多少、要不要被 superuser 安裝」</p>
+        <div class="code" style="margin-top:0.5rem;font-size:0.78em">comment = <span class="str">'my ext'</span>
+default_version = <span class="str">'0.1'</span>
+module_pathname = <span class="str">'$libdir/my_ext'</span>
+relocatable = <span class="kw">true</span></div>
+      </div>
+      <div class="card accent-cyan">
+        <h3>② .sql</h3>
+        <p class="mono" style="font-size:0.85em;color:var(--text-mute)">my_ext--0.1.sql</p>
+        <p style="margin-top:0.4rem"><span class="inline-code">CREATE EXTENSION</span> 時實際被執行的 DDL</p>
+        <div class="code" style="margin-top:0.5rem;font-size:0.78em"><span class="kw">CREATE FUNCTION</span> hello()
+<span class="kw">RETURNS</span> text
+<span class="kw">AS</span> <span class="str">'$libdir/my_ext'</span>, <span class="str">'hello'</span>
+<span class="kw">LANGUAGE C STRICT</span>;</div>
+      </div>
+      <div class="card accent-cyan">
+        <h3>③ .so / .dll</h3>
+        <p class="mono" style="font-size:0.85em;color:var(--text-mute)">my_ext.so</p>
+        <p style="margin-top:0.4rem">編譯出來的共享函式庫;PostgreSQL <span class="cyan">dlopen()</span> 後找到 <span class="inline-code">_PG_init</span></p>
+        <div class="code" style="margin-top:0.5rem;font-size:0.78em"><span class="mac">PG_MODULE_MAGIC</span>;
+
+<span class="kw">void</span> <span class="fn">_PG_init</span>(<span class="kw">void</span>) {
+    <span class="com">// 在這註冊 hook</span>
+}</div>
+      </div>
+    </div>
+    <div class="takeaway reveal">三個檔案缺一不可。pgrx 會自動產生 control 與 SQL,開發者只需專注於 Rust 程式碼;接下來看這個 .so 能掛在哪些面上, extension 真正能影響 PG 的接口面有六大類。</div>
+  </div>
+  <div class="chrome-bot"><span class="l">// minimum viable extension</span><span class="r">3 files, 1 init function</span></div>
+</section>
+
+<!-- ============== SLIDE 12 · 能擴充什麼? ============== -->
+<section class="slide" id="s12">
+  <div class="chrome-top"><span class="l">extension.surface</span><span class="r page-no"></span></div>
+  <div class="slide-content">
+    <div class="slide-header reveal"><span class="num">// 2.2</span><h2>能擴充的「<span class="accent">面</span>」有哪些?</h2></div>
+    <div class="grid-3 reveal">
+      <div class="card accent-cyan"><h3>函式 / 型別</h3><ul class="bullet"><li>UDF · 自訂函式</li><li>自訂 type (input/output)</li><li>operator + operator class</li><li>aggregate / window</li></ul></div>
+      <div class="card accent-cyan"><h3>Hook 點</h3><ul class="bullet"><li>planner / executor</li><li>ProcessUtility (DDL)</li><li>ClientAuthentication</li><li>shmem_startup / emit_log</li></ul></div>
+      <div class="card accent-cyan"><h3>背景任務</h3><ul class="bullet"><li>Background Worker</li><li>常駐進程</li><li>定時排程</li><li>例: pg_cron, autovacuum</li></ul></div>
+      <div class="card accent-magenta"><h3>儲存層</h3><ul class="bullet"><li>Table Access Method</li><li>Foreign Data Wrapper</li><li>Custom Scan Provider</li><li>例: zheap, citus</li></ul></div>
+      <div class="card accent-magenta"><h3>索引層</h3><ul class="bullet"><li>Index Access Method</li><li>(B-tree / GIN / GiST / SP-GiST / BRIN)</li><li>自訂索引型別</li><li>例: pgvector (HNSW)</li></ul></div>
+      <div class="card accent-magenta"><h3>程序語言</h3><ul class="bullet"><li>PL Handler</li><li>PL/Rust · PL/v8 · PL/Python</li><li>讓 SQL 能呼叫該語言函式</li></ul></div>
+    </div>
+    <div class="takeaway reveal">extension 的擴充面很廣,從函式到儲存層、索引層都能介入;接下來看用什麼工具能把這六類擴充面都做到。</div>
+  </div>
+  <div class="chrome-bot"><span class="l">// six extension surfaces</span><span class="r">pgrx covers most</span></div>
+</section>
+
+<!-- ============== SECTION 3 · pgrx ============== -->
+<section class="slide section-slide" id="s13">
+  <div class="chrome-top"><span class="l">section.03</span><span class="r page-no"></span></div>
+  <div class="slide-content">
+    <span class="sec-num reveal">SECTION 03</span>
+    <h2 class="sec-title reveal">pgrx — 用 <span class="accent">Rust</span><br>寫 PostgreSQL extension 的框架</h2>
+    <p class="sec-desc reveal">不只是「Rust binding」它是一整套包含 build、test、type mapping、SQL 自動產生的開發環境。</p>
+  </div>
+  <div class="chrome-bot"><span class="l">github.com/pgcentralfoundation/pgrx</span><span class="r">postgres 13 → 17 supported</span></div>
+</section>
+
+
+<!-- ============== SLIDE 13b · C extension 三個痛點 (moved before pgrx 是什麼) ============== -->
+<section class="slide" id="s13b">
+  <div class="chrome-top"><span class="l">pgrx.why-not-c</span><span class="r page-no"></span></div>
+  <div class="slide-content">
+    <div class="slide-header reveal"><span class="num">// 3.1</span><h2>為什麼需要 pgrx? — <span class="accent">C extension 的痛點</span></h2></div>
+    <p class="reveal" style="font-size:1.05em; color:var(--text-dim); margin-bottom:0.9rem; line-height:1.6">用 C 寫 PostgreSQL extension 的痛分兩類:<strong class="cyan">PG backend 帶來的</strong>(memory / longjmp / ABI),以及 <strong class="cyan">C 語言本身的</strong>(工具鏈 / 寫法 / 缺乏型別安全)。</p>
+
+    <div class="grid-3 reveal" style="gap:1rem">
+      <div class="card accent-magenta" style="padding:0.95rem 1.2rem">
+        <h3 style="margin-bottom:0.4rem; font-size:1.1em">Pain 01 · 記憶體</h3>
+        <p style="font-size:0.95em; line-height:1.55"><span class="inline-code">palloc / pfree</span> 綁在 MemoryContext,context 結束才整批釋放;raw pointer / cstring 一不小心就 segfault。</p>
+        <p style="font-size:0.85em; color:var(--text-mute); margin-top:0.55rem">leak · use-after-free · double-free 全靠 reviewer</p>
+      </div>
+      <div class="card accent-magenta" style="padding:0.95rem 1.2rem">
+        <h3 style="margin-bottom:0.4rem; font-size:1.1em">Pain 02 · longjmp 跳過清理</h3>
+        <p style="font-size:0.95em; line-height:1.55"><span class="inline-code">ereport(ERROR)</span> 透過 longjmp 跳回最近的 <span class="inline-code">PG_TRY/PG_CATCH</span>,跟 C++ destructor、Rust Drop 完全不相容。</p>
+        <p style="font-size:0.85em; color:var(--text-mute); margin-top:0.55rem">stack 上的資源沒人清理</p>
+      </div>
+      <div class="card accent-magenta" style="padding:0.95rem 1.2rem">
+        <h3 style="margin-bottom:0.4rem; font-size:1.1em">Pain 03 · ABI 變動</h3>
+        <p style="font-size:0.95em; line-height:1.55">PG 每個 major version 動 ABI,同一份 <span class="inline-code">.so</span> 不能跨版本;internal API 沒 stability guarantee。</p>
+        <p style="font-size:0.85em; color:var(--text-mute); margin-top:0.55rem">多版本支援 = #ifdef 地獄</p>
+      </div>
+
+      <div class="card accent-amber" style="padding:0.95rem 1.2rem">
+        <h3 style="margin-bottom:0.4rem; font-size:1.1em">Pain 04 · 環境 &amp; 工具鏈</h3>
+        <p style="font-size:0.95em; line-height:1.55">先要 <span class="inline-code">pg_config</span> 找到 headers / lib,還要對應的 <span class="inline-code">postgresql-server-dev</span> 套件,各 distro 路徑不一;CI 上每個 PG 版本都要重新裝一次。</p>
+        <p style="font-size:0.85em; color:var(--text-mute); margin-top:0.55rem">Linux · macOS · Windows 各自踩雷</p>
+      </div>
+      <div class="card accent-amber" style="padding:0.95rem 1.2rem">
+        <h3 style="margin-bottom:0.4rem; font-size:1.1em">Pain 05 · Makefile / PGXS</h3>
+        <p style="font-size:0.95em; line-height:1.55">PGXS 約定俗成的目錄結構 + control 檔 + sql 檔 + 版本升級 script,新手不熟就卡關;build / install / test / clean 步驟分散多處。</p>
+        <p style="font-size:0.85em; color:var(--text-mute); margin-top:0.55rem">Makefile 是隱性的學習成本</p>
+      </div>
+      <div class="card accent-amber" style="padding:0.95rem 1.2rem">
+        <h3 style="margin-bottom:0.4rem; font-size:1.1em">Pain 06 · 樣板 &amp; 缺型別安全</h3>
+        <p style="font-size:0.95em; line-height:1.55">每個 UDF 都要寫 <span class="inline-code">PG_FUNCTION_INFO_V1</span> + <span class="inline-code">PG_GETARG_*</span> + <span class="inline-code">PG_RETURN_*</span>;泛型靠 macro,生命週期、null 處理、字串編碼全靠人工。</p>
+        <p style="font-size:0.85em; color:var(--text-mute); margin-top:0.55rem">沒套件管理、沒 lint、沒 fmt</p>
+      </div>
+    </div>
+
+    <div class="takeaway reveal">寫 PG extension 的成本不只是 C 語法,還包含工具鏈、Makefile、ABI、記憶體模型;下一張看一個專門來解這六個痛點的框架, pgrx 到底是什麼。</div>
+  </div>
+  <div class="chrome-bot"><span class="l">// 6 pains · PG-specific + C-generic</span><span class="r">pgrx solves all six</span></div>
+</section>
+
+<!-- ============== SLIDE 14 · What is pgrx ============== -->
+<section class="slide" id="s14">
+  <div class="chrome-top"><span class="l">pgrx.overview</span><span class="r page-no"></span></div>
+  <div class="slide-content">
+    <div class="slide-header reveal"><span class="num">// 3.2</span><h2>pgrx 是什麼?</h2></div>
+    <div class="grid-2 reveal">
+      <div class="flex-col" style="gap:0.5rem">
+        <div class="card accent-cyan">
+          <h3>簡單定義</h3>
+          <p>pgrx 是 <strong class="cyan">PostgreSQL extension 的 Rust 開發框架</strong>,把 PostgreSQL 的 C API 用 <span class="inline-code">bindgen</span> 包成安全的 Rust 介面,加上一整套 cargo 工具鏈。</p>
+        </div>
+        <div class="card accent-cyan">
+          <h3>四大支柱</h3>
+          <ul class="bullet">
+            <li><strong>整合開發環境</strong>, <span class="inline-code">cargo pgrx init/new/run/test</span></li>
+            <li><strong>安全的 C API binding</strong>, 大部分 unsafe 已封裝</li>
+            <li><strong>自動型別映射</strong>, i32 ↔ integer, String ↔ text</li>
+            <li><strong>自動產生 SQL</strong>, 不用手寫 CREATE FUNCTION</li>
+          </ul>
+        </div>
+      </div>
+      <div class="card accent-magenta">
+        <h3>用 pgrx 蓋出來的真實 extension</h3>
+        <ul class="bullet">
+          <li><strong>ParadeDB</strong>, 在 PG 裡裝 Elasticsearch</li>
+          <li><strong>PostgresML</strong>, 機器學習推理</li>
+          <li><strong>ZomboDB</strong>, PG ↔ Elasticsearch bridge</li>
+          <li><strong>PL/Rust</strong>, Rust 的 procedural language</li>
+          <li><strong>pg_vectorize</strong>, 向量檢索</li>
+          <li><strong>plprql</strong>, PRQL → SQL transpiler</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="takeaway reveal">pgrx 是 PG Community Foundation 維護的官方級框架,真實 production extension 都用它;接下來看它怎麼把上一張那六個痛點一次處理掉, 從 ABI / FFI 開始。</div>
+    </div>
+  <div class="chrome-bot"><span class="l">// not just bindings — a full toolchain</span><span class="r">PGCF maintained</span></div>
+</section>
+
+<!-- ============== SLIDE 14b · pgrx ABI / FFI 流程 ============== -->
+<section class="slide" id="s14b">
+  <div class="chrome-top"><span class="l">pgrx.abi</span><span class="r page-no"></span></div>
+  <div class="slide-content">
+    <div class="slide-header reveal"><span class="num">// 3.3</span><h2>pgrx 怎麼把 <span class="accent">PostgreSQL C API</span> 變成 Rust API?</h2></div>
+
+    <div class="reveal" style="display:grid; grid-template-columns: 1fr 1fr; gap:1rem; align-items:stretch; flex:1; min-height:0">
+
+      <!-- 左欄:build pipeline mermaid -->
+      <div class="flex-col" style="gap:0.55rem; min-height:0">
+        <div class="card accent-cyan" style="padding:0.55rem 0.9rem">
+          <h3 style="margin-bottom:0.15rem; font-size:0.95em">Build pipeline</h3>
+          <p style="font-size:0.83em">cargo-pgrx 在編譯時跑 <span class="inline-code">bindgen</span> 把 PG headers 轉成 raw FFI,再由 pgrx 套上安全 wrapper,最後產生 .so + .control + .sql 三件套。</p>
+        </div>
+        <div style="flex:1; display:flex; align-items:center; justify-content:center; background:linear-gradient(180deg,#0a0f1c,#060b18); border:1px solid var(--rule-strong); border-radius:10px; padding:0.5rem; min-height:0; overflow:auto">
+          <div class="mermaid" style="width:100%; max-height:48vh; text-align:center; color:#e6f7ff">
+flowchart TD
+  H["PG headers<br/>(postgres.h, fmgr.h, ...)"]
+  BG["bindgen<br/>parse C → emit Rust"]
+  PS["pg_sys (raw FFI)<br/>unsafe extern C"]
+  SAFE["pgrx safe wrappers<br/>PgBox / Datum / SPI / pg_guard"]
+  USER["你的 Rust code<br/>#[pg_extern] fn ..."]
+  OUT["build artifacts<br/>my_ext.so + .control + .sql"]
+  H --> BG --> PS --> SAFE --> USER --> OUT
+  style H    fill:#0a1f3a,stroke:#5b8cff,color:#dce8ff
+  style BG   fill:#3d2a08,stroke:#ffb547,color:#fff4e1
+  style PS   fill:#3d0d22,stroke:#ff5d8f,color:#fce4ec
+  style SAFE fill:#0d3a25,stroke:#7df0a0,color:#e8ffe9
+  style USER fill:#0d3a52,stroke:#5cf0ff,color:#e6f7ff,stroke-width:2px
+  style OUT  fill:#2a0d3d,stroke:#c8a8ff,color:#f3e5f5,stroke-width:2px
+          </div>
+        </div>
+      </div>
+
+      <!-- 右欄:三層對照程式碼 -->
+      <div class="flex-col" style="gap:0.45rem; min-height:0">
+        <div class="card accent-magenta" style="padding:0.55rem 0.9rem">
+          <h3 style="margin-bottom:0.15rem; font-size:0.95em">三層抽象,同一段功能</h3>
+          <p style="font-size:0.83em">同一個取 datum 的動作,從 C → pg_sys raw FFI → pgrx 安全 API,逐層抽象。</p>
+        </div>
+        <div class="code" style="font-size:0.74em; padding:0.55rem 0.85rem; line-height:1.45">
+<span class="com">// (1) 原生 C — PG header</span>
+<span class="kw">extern</span> Datum <span class="fn">pg_proc_aclmask</span>(
+    Oid roleid, Oid procoid,
+    <span class="type">AclMode</span> mask, <span class="type">AclMaskHow</span> how);
+        </div>
+        <div class="code" style="font-size:0.74em; padding:0.55rem 0.85rem; line-height:1.45">
+<span class="com">// (2) bindgen 產出 — pg_sys (raw FFI, unsafe)</span>
+<span class="kw">unsafe extern</span> <span class="str">"C"</span> {
+    <span class="kw">pub fn</span> <span class="fn">pg_proc_aclmask</span>(
+        roleid: <span class="type">pg_sys::Oid</span>,
+        procoid: <span class="type">pg_sys::Oid</span>,
+        mask: <span class="type">pg_sys::AclMode</span>,
+        how: <span class="type">pg_sys::AclMaskHow</span>) -&gt; <span class="type">Datum</span>;
+}
+        </div>
+        <div class="code" style="font-size:0.74em; padding:0.55rem 0.85rem; line-height:1.45">
+<span class="com">// (3) 用戶 Rust — pgrx 高層 API,自動產生 SQL</span>
+<span class="mac">#[pg_extern]</span>
+<span class="kw">fn</span> <span class="fn">add</span>(a: <span class="type">i64</span>, b: <span class="type">i64</span>) -&gt; <span class="type">i64</span> {
+    <span class="com">// pgrx 自動把 i64 ↔ bigint, panic ↔ ereport</span>
+    a + b
+}
+        </div>
+      </div>
+    </div>
+
+    <!-- 底排:四個關鍵元素 -->
+    <div class="reveal" style="display:grid; grid-template-columns: repeat(4,1fr); gap:0.55rem; margin-top:0.6rem">
+      <div class="card" style="padding:0.5rem 0.75rem; border-left:3px solid #5cf0ff">
+        <h3 style="margin-bottom:0.1rem; font-size:0.85em">pg_module_magic!()</h3>
+        <p style="font-size:0.78em">產生 PG 載入時的 magic block,版本握手</p>
+      </div>
+      <div class="card" style="padding:0.5rem 0.75rem; border-left:3px solid #ffb547">
+        <h3 style="margin-bottom:0.1rem; font-size:0.85em">#[pg_extern]</h3>
+        <p style="font-size:0.78em">註冊 UDF + 自動推導型別、自動產 SQL</p>
+      </div>
+      <div class="card" style="padding:0.5rem 0.75rem; border-left:3px solid #ff5d8f">
+        <h3 style="margin-bottom:0.1rem; font-size:0.85em">#[pg_guard]</h3>
+        <p style="font-size:0.78em">FFI 邊界 panic ↔ ereport 雙向轉譯</p>
+      </div>
+      <div class="card" style="padding:0.5rem 0.75rem; border-left:3px solid #c8a8ff">
+        <h3 style="margin-bottom:0.1rem; font-size:0.85em">cargo-pgrx</h3>
+        <p style="font-size:0.78em">同份原始碼以 features 編 PG 13–18 多版本</p>
+      </div>
+    </div>
+
+    <div class="takeaway reveal">pgrx 的工作不是「綁定」而是<strong>三層抽象 + 工具鏈整合</strong>:bindgen 處理 ABI、安全 wrapper 處理生命週期、cargo-pgrx 處理 build / test / install;下一張看 extension 載入時的入口, _PG_init 與 Magic Block 在 pgrx 寫起來長什麼樣。</div>
+  </div>
+  <div class="chrome-bot"><span class="l">// bindgen → pg_sys → safe wrappers → your code</span><span class="r">three layers, one cargo cmd</span></div>
+</section>
+
+<!-- ============== SLIDE 11 · _PG_init & Magic Block (moved into §3) ============== -->
+<section class="slide" id="s11">
+  <div class="chrome-top"><span class="l">pgrx.bootstrap</span><span class="r page-no"></span></div>
+  <div class="slide-content">
+    <div class="slide-header reveal"><span class="num">// 3.4</span><h2>啟動流程 — <span class="accent">_PG_init</span> 與 Magic Block</h2></div>
+    <div class="grid-2 reveal">
+      <div class="card accent-magenta">
+        <h3>Magic Block — 版本握手</h3>
+        <p>PostgreSQL load 共享庫時,先檢查一個 magic 結構:版本號、變數大小、locale...只要不合就拒載入。</p>
+        <ul class="bullet" style="margin-top:0.4rem">
+          <li>避免「拿 PG14 編的 .so 載到 PG17」</li>
+          <li>C 端用 <span class="inline-code">PG_MODULE_MAGIC</span> macro</li>
+          <li>pgrx 的 <span class="inline-code">pg_module_magic!()</span> 對應同一件事</li>
+        </ul>
+      </div>
+      <div class="card accent-magenta">
+        <h3>_PG_init() — 你的 main()</h3>
+        <p>每個 backend 第一次 load .so 時被呼叫一次,適合做:</p>
+        <ul class="bullet" style="margin-top:0.4rem">
+          <li>替換 hook (planner / executor / utility)</li>
+          <li>註冊 GUC 參數 <span class="inline-code">DefineCustom*Variable</span></li>
+          <li>註冊 background worker</li>
+          <li>申請 shared memory (LWLock / shmem segment)</li>
+        </ul>
+      </div>
+    </div>
+    <div class="code with-dots reveal" style="margin-top:0.6rem"><span class="com">// pgrx 版本 — Rust</span>
+<span class="mac">pgrx::pg_module_magic</span>!();
+
+<span class="mac">#[pg_guard]</span>
+<span class="kw">pub extern</span> <span class="str">"C"</span> <span class="kw">fn</span> <span class="fn">_PG_init</span>() {
+    <span class="com">// 替換 planner_hook、註冊 GUC、啟動 bgworker...</span>
+    <span class="kw">unsafe</span> {
+        PREV_PLANNER = pg_sys::planner_hook;
+        pg_sys::planner_hook = <span class="type">Some</span>(my_planner);
+    }
+}</div>
+    <div class="takeaway reveal">_PG_init 是 extension 的初始化進入點,完成註冊後即等待 PostgreSQL 透過 hook 回呼;接下來看在這個進入點裡實際會處理什麼樣的型別轉換, Rust ↔ Datum 是 pgrx 一行 attribute 在做的事。</div>
+  </div>
+  <div class="chrome-bot"><span class="l">// dlopen → magic check → _PG_init</span><span class="r">register, then wait</span></div>
+</section>
+
+<!-- ============== SLIDE 14c · Rust ↔ Datum Mapping × pgrx 寫起來像什麼 (merged 3.4 + 3.5) ============== -->
+<section class="slide" id="s14c">
+  <div class="chrome-top"><span class="l">pgrx.type-bridge</span><span class="r page-no"></span></div>
+  <div class="slide-content">
+    <div class="slide-header reveal"><span class="num">// 3.5</span><h2>Rust ↔ <span class="accent">Datum</span> Mapping × <span class="accent">pgrx 寫起來</span></h2></div>
+    <div class="reveal" style="display:grid; grid-template-columns: 1.25fr 1fr; gap:1rem; align-items:stretch; flex:1; min-height:0">
+      <div class="flex-col" style="gap:0.6rem; min-height:0">
+        <div class="card accent-magenta" style="padding:0.7rem 1rem">
+          <h3 style="margin-bottom:0.25rem; font-size:1.05em">C 版 add_one</h3>
+          <div class="code" style="font-size:0.92em; padding:0.7rem 0.9rem; margin-top:0.3rem; line-height:1.55"><span class="mac">PG_FUNCTION_INFO_V1</span>(<span class="fn">add_one</span>);
+<span class="type">Datum</span> <span class="fn">add_one</span>(<span class="mac">PG_FUNCTION_ARGS</span>) {
+  <span class="kw">if</span> (<span class="mac">PG_ARGISNULL</span>(<span class="num">0</span>))
+    <span class="mac">PG_RETURN_NULL</span>();
+  <span class="kw">int32</span> a = <span class="mac">PG_GETARG_INT32</span>(<span class="num">0</span>);
+  <span class="mac">PG_RETURN_INT32</span>(a + <span class="num">1</span>);
+}</div>
+        </div>
+        <div class="card accent-cyan" style="padding:0.7rem 1rem">
+          <h3 style="margin-bottom:0.25rem; font-size:1.05em">pgrx 版 add_one</h3>
+          <div class="code" style="font-size:0.95em; padding:0.7rem 0.9rem; margin-top:0.3rem; line-height:1.55"><span class="mac">#[pg_extern]</span>
+<span class="kw">fn</span> <span class="fn">add_one</span>(
+  a: <span class="type">Option</span>&lt;<span class="type">i32</span>&gt;
+) -&gt; <span class="type">Option</span>&lt;<span class="type">i32</span>&gt; {
+  a.<span class="fn">map</span>(|v| v + <span class="num">1</span>)
+}</div>
+          <p style="font-size:0.9em; margin-top:0.45rem; color:var(--text-dim)">7 行 → 3 行,NULL 由 <span class="inline-code">Option</span> 處理。</p>
+        </div>
+      </div>
+      <div class="flex-col" style="gap:0.5rem; min-height:0">
+        <div class="card accent-amber" style="padding:0.55rem 0.85rem">
+          <h3 style="margin-bottom:0.2rem; font-size:0.92em">Rust ↔ PostgreSQL 型別對照</h3>
+          <table style="font-size:0.82em; margin-top:0.2rem">
+            <thead><tr><th>Rust</th><th>PostgreSQL</th></tr></thead>
+            <tbody>
+              <tr><td class="mono cyan">i16 / i32 / i64</td><td>int2 / int4 / int8</td></tr>
+              <tr><td class="mono cyan">f32 / f64</td><td>real / double precision</td></tr>
+              <tr><td class="mono cyan">String / &amp;str</td><td>text</td></tr>
+              <tr><td class="mono cyan">Vec&lt;T&gt;</td><td>T[] (array)</td></tr>
+              <tr><td class="mono cyan">Option&lt;T&gt;</td><td><strong class="cyan">NULL handling</strong></td></tr>
+              <tr><td class="mono cyan">pgrx::JsonB</td><td>jsonb</td></tr>
+              <tr><td class="mono cyan">pgrx::Date / Timestamp</td><td>date / timestamp</td></tr>
+              <tr><td class="mono cyan">pgrx::Uuid</td><td>uuid</td></tr>
+              <tr><td class="mono cyan">SetOfIterator&lt;T&gt;</td><td>SETOF T (SRF)</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="card accent-magenta" style="padding:0.5rem 0.85rem">
+          <h3 style="margin-bottom:0.15rem; font-size:0.88em">pgrx 替你做的事</h3>
+          <ul class="bullet" style="font-size:0.8em; line-height:1.5">
+            <li><span class="inline-code">#[pg_extern]</span> 自動產 <span class="inline-code">CREATE FUNCTION</span> SQL</li>
+            <li>Rust 型別自動對映 PG 型別、<span class="inline-code">Option</span> 處理 NULL</li>
+            <li><span class="inline-code">Result&lt;_, E&gt;</span> Err 自動轉 <span class="inline-code">ereport(ERROR)</span></li>
+            <li><span class="inline-code">#[pg_test]</span> 跑在真的 PG 裡,不是 mock</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+    <div class="takeaway reveal">一行 <span class="inline-code">#[pg_extern]</span> 同時拿到 SQL 自動產生、型別自動對映、<span class="inline-code">Option</span> NULL safety、<span class="inline-code">#[pg_test]</span> 跑在真 PG 裡, C 寫法的 80% 樣板就被吃掉了。</div>
+    <div class="card reveal" style="margin-top:0.35rem; padding:0.4rem 0.85rem; border-left:3px solid #5cf0ff">
+      <p style="font-size:0.78em; color:var(--text-dim)">完整型別對照與自訂 type 範例:<a href="https://github.com/pgcentralfoundation/pgrx" target="_blank" rel="noopener" class="cyan" style="text-decoration:none">github.com/pgcentralfoundation/pgrx</a> · <a href="https://docs.rs/pgrx" target="_blank" rel="noopener" class="cyan" style="text-decoration:none">docs.rs/pgrx</a>;也支援 <span class="inline-code">numeric</span>、<span class="inline-code">timestamptz</span>、<span class="inline-code">interval</span>、<span class="inline-code">inet</span>、<span class="inline-code">bytea</span>、<span class="inline-code">range</span>、composite 等。</p>
+    </div>
+  </div>
+  <div class="chrome-bot"><span class="l">// type system handles types + NULLs + tests</span><span class="r">one attribute, four wins</span></div>
+</section>
+
+
+<!-- ============== SLIDE 17 · pgrx workflow ============== -->
+<section class="slide" id="s17">
+  <div class="chrome-top"><span class="l">pgrx.workflow</span><span class="r page-no"></span></div>
+  <div class="slide-content">
+    <div class="slide-header reveal"><span class="num">// 3.6</span><h2>從零到 <span class="accent">CREATE EXTENSION</span> 的開發流程</h2></div>
+    <div class="grid-2 reveal" style="align-items:start">
+      <ol class="steps">
+        <li><strong>安裝 pgrx</strong>, <span class="mono">cargo install --locked cargo-pgrx</span></li>
+        <li><strong>初始化環境</strong>, <span class="mono">cargo pgrx init</span>;會自動下載並編譯 PG 13–17 到 <span class="inline-code">~/.pgrx</span></li>
+        <li><strong>建專案</strong>, <span class="mono">cargo pgrx new my_ext</span></li>
+        <li><strong>寫 Rust 程式碼</strong>, 用 <span class="inline-code">#[pg_extern]</span> 等屬性</li>
+        <li><strong>跑起來</strong>, <span class="mono">cargo pgrx run pg17</span> 自動啟一個 PG + psql</li>
+        <li><strong>測試</strong>, <span class="mono">cargo pgrx test pg17</span></li>
+        <li><strong>打包</strong>, <span class="mono">cargo pgrx package</span> 輸出 .so + .sql + .control</li>
+      </ol>
+      <div class="terminal">
+<div class="prompt">cargo pgrx new example</div>
+<div class="out">  Creating crate <span class="ok">example</span>...</div>
+<div class="out">  ▸ Cargo.toml, src/lib.rs created</div>
+<div class="prompt">cargo pgrx run pg17</div>
+<div class="out">  building <span class="ok">example</span>-0.1.0 (pg17)</div>
+<div class="out">  installing extension to ~/.pgrx/17.x/...</div>
+<div class="out">  starting Postgres on port 28817</div>
+<div class="out">  psql (17.4)</div>
+<div class="out"><span class="ok">example=#</span> CREATE EXTENSION example;</div>
+<div class="out">CREATE EXTENSION</div>
+<div class="out"><span class="ok">example=#</span> SELECT hello_example();</div>
+<div class="out"> hello_example </div>
+<div class="out">---------------</div>
+<div class="out"> Hello, example</div>
+<div class="out">(1 row)</div>
+      </div>
+    </div>
+    <div class="takeaway reveal">第一次 cargo pgrx init 約需 10–20 分鐘編譯多個 PG 版本,之後重建為秒級;下一張盤點 pgrx 內建覆蓋了哪些 extension 能力, 看一個框架到底吃下了多少接口面。</div>
+  </div>
+  <div class="chrome-bot"><span class="l">// new → run → test → package</span><span class="r">all via cargo</span></div>
+</section>
+
+<!-- ============== SLIDE 18 · pgrx feature surface ============== -->
+<section class="slide" id="s18">
+  <div class="chrome-top"><span class="l">pgrx.features</span><span class="r page-no"></span></div>
+  <div class="slide-content">
+    <div class="slide-header reveal"><span class="num">// 3.7</span><h2>pgrx 內建支援的能力</h2></div>
+    <div class="grid-4 reveal">
+      <div class="card accent-cyan"><h3>Type Mapping</h3><p>i32/i64/f64/String/Vec/Option/Date/Timestamp/JSON/UUID 全自動,不寫 input/output func</p></div>
+      <div class="card accent-cyan"><h3>SPI</h3><p><span class="inline-code">Spi::run()</span> / <span class="inline-code">Spi::get_one()</span>;直接從 Rust 跑 SQL</p></div>
+      <div class="card accent-cyan"><h3>SRF</h3><p>用 <span class="inline-code">SetOfIterator</span> 或 <span class="inline-code">TableIterator</span>,自動接 PG 的 SRF 協議</p></div>
+      <div class="card accent-cyan"><h3>Triggers</h3><p><span class="inline-code">#[pg_trigger]</span> 自動產生 trigger function</p></div>
+      <div class="card accent-magenta"><h3>Hooks</h3><p>planner / executor / utility / ProcessUtility, 全部可掛</p></div>
+      <div class="card accent-magenta"><h3>Background Worker</h3><p><span class="inline-code">BackgroundWorkerBuilder</span> 一行啟動常駐進程</p></div>
+      <div class="card accent-magenta"><h3>FDW</h3><p><span class="inline-code">supabase-wrappers</span> 或自實作 <span class="inline-code">FdwRoutine</span></p></div>
+      <div class="card accent-magenta"><h3>Custom Types</h3><p>實作 <span class="inline-code">PostgresType</span> trait,自動產 CREATE TYPE</p></div>
+      <div class="card accent-amber"><h3>Index AM</h3><p>B-tree / hash 自動;GIN / GiST / SP-GiST 需手寫</p></div>
+      <div class="card accent-amber"><h3>Aggregate</h3><p><span class="inline-code">#[pg_aggregate]</span> declarative</p></div>
+      <div class="card accent-amber"><h3>GUC</h3><p>註冊自訂參數,跟 <span class="inline-code">postgresql.conf</span> 整合</p></div>
+      <div class="card accent-amber"><h3>SHMEM / LWLock</h3><p>共享記憶體 / 跨 backend 同步</p></div>
+    </div>
+    <div class="takeaway reveal">這些能力靠 Rust 型別系統 + 安全 wrapper 撐起來;下一段看 pgrx 怎麼處理 PG 與 Rust 兩種完全不同的記憶體模型。</div>
+  </div>
+  <div class="chrome-bot"><span class="l">// 12 feature surfaces, mostly declarative</span><span class="r">95% covered</span></div>
+</section>
+
+<!-- ============== SECTION 4 · MEMORY MODEL ============== -->
+<section class="slide section-slide" id="s19">
+  <div class="chrome-top"><span class="l">section.04</span><span class="r page-no"></span></div>
+  <div class="slide-content">
+    <span class="sec-num reveal">SECTION 04</span>
+    <h2 class="sec-title reveal">Memory Model 大對決<br><span class="accent">PostgreSQL × Rust × pgrx</span></h2>
+    <p class="sec-desc reveal">PG 有自己的 region-based 記憶體系統,Rust 有 ownership,pgrx 要在兩者之間搭橋。</p>
+  </div>
+  <div class="chrome-bot"><span class="l">palloc × MemoryContext × ownership</span><span class="r">three models, one extension</span></div>
+</section>
+
+<!-- ============== SLIDE 20 · PostgreSQL memory 概念 ============== -->
+<section class="slide" id="s20">
+  <div class="chrome-top"><span class="l">memory.postgres</span><span class="r page-no"></span></div>
+  <div class="slide-content">
+    <div class="slide-header reveal"><span class="num">// 4.1</span><h2>PostgreSQL 的記憶體模型 — <span class="accent">MemoryContext</span></h2></div>
+    <div class="grid-2 reveal">
+      <div class="card accent-cyan">
+        <h3>Region-based allocation</h3>
+        <p>不用 <span class="inline-code">malloc/free</span>,而是用 <span class="inline-code">palloc/pfree</span>,所有分配都掛在 <strong>CurrentMemoryContext</strong> 上, 一棵以 <span class="cyan">TopMemoryContext</span> 為根的樹。</p>
+        <ul class="bullet" style="margin-top:0.4rem">
+          <li><strong>palloc(size)</strong>, 在當前 context 配置</li>
+          <li><strong>palloc(ctx, size)</strong>, 指定 context 配置 (PG 16+)</li>
+          <li><strong>MemoryContextSwitchTo(ctx)</strong>, 切換 current</li>
+          <li><strong>MemoryContextReset(ctx)</strong>, 整棵子樹歸還</li>
+          <li><strong>MemoryContextDelete(ctx)</strong>, 連自己一起刪</li>
+        </ul>
+      </div>
+      <div class="card accent-cyan">
+        <h3>釋放只要一行</h3>
+        <p>不用一個個 free,Reset/Delete 整棵子樹立刻歸還,連帶釋放所有子 context。</p>
+        <div class="code" style="margin-top:0.5rem;font-size:0.82em"><span class="type">MemoryContext</span> my =
+    <span class="fn">AllocSetContextCreate</span>(
+        <span class="mac">CurrentMemoryContext</span>,
+        <span class="str">"my work ctx"</span>,
+        <span class="mac">ALLOCSET_DEFAULT_SIZES</span>);
+
+<span class="type">MemoryContext</span> old = <span class="fn">MemoryContextSwitchTo</span>(my);
+<span class="kw">char</span> *buf = <span class="fn">palloc</span>(<span class="num">1024</span>);
+<span class="com">// ... 用 buf ...</span>
+<span class="fn">MemoryContextSwitchTo</span>(old);
+<span class="fn">MemoryContextDelete</span>(my);   <span class="com">// 一次 free 全部</span></div>
+      </div>
+    </div>
+    <div class="card accent-magenta reveal" style="margin-top:0.6rem">
+      <h3>為什麼 PG 不直接用 malloc?</h3>
+      <div class="grid-4" style="margin-top:0.3rem">
+        <div><strong class="cyan">① 性能</strong><br><span style="font-size:0.88em">bulk free 比逐個 free 快數十倍</span></div>
+        <div><strong class="cyan">② 異常安全</strong><br><span style="font-size:0.88em">query 失敗 → 整個 context 直接丟,不會 leak</span></div>
+        <div><strong class="cyan">③ 生命週期清楚</strong><br><span style="font-size:0.88em">每個階段一個 context,範圍寫死</span></div>
+        <div><strong class="cyan">④ 配合 longjmp</strong><br><span style="font-size:0.88em"><span class="inline-code">PG_TRY/CATCH</span> 用 sigsetjmp,context 是 cleanup 的唯一手段</span></div>
+      </div>
+    </div>
+    <div class="takeaway reveal">PostgreSQL 的記憶體模型重點在於 context 的批次釋放,而非單一指標的 free。下一張展示 context 樹結構。</div>
+  </div>
+  <div class="chrome-bot"><span class="l">// palloc + context tree</span><span class="r">free is bulk, not per-pointer</span></div>
+</section>
+
+<!-- ============== SLIDE 20b · MemoryContext 階層樹 ============== -->
+<section class="slide" id="s20b">
+  <div class="chrome-top"><span class="l">memory.context-tree</span><span class="r page-no"></span></div>
+  <div class="slide-content">
+    <div class="slide-header reveal"><span class="num">// 4.1b</span><h2>主要的 <span class="accent">MemoryContext</span> 與上下關係</h2></div>
+    <div class="reveal" style="display:grid; grid-template-columns: 1.05fr 1fr; gap:1rem; align-items:stretch; flex:1; min-height:0">
+      <div class="code with-dots" style="font-size:0.92em; line-height:1.6; min-height:0">
+<span class="com">/* PG 啟動每個 connection 時建立,以下為主要 context 樹 */</span>
+
+<span class="type">TopMemoryContext</span>                  <span class="com">// 整個 connection session 一生</span>
+├<span class="type">ErrorContext</span>                <span class="com">// 處理 elog/ereport,8KB 固定</span>
+├<span class="type">PostmasterContext</span>           <span class="com">// fork 後子進程清掉</span>
+├<span class="type">CacheMemoryContext</span>          <span class="com">// catalog cache / relcache</span>
+│   ├<span class="type">RelCacheMemoryContext</span>
+│   └<span class="type">CatCacheMemoryContext</span>
+├<span class="type">MessageContext</span>              <span class="com">// 一次 client message,reset/loop</span>
+├<span class="type">TopTransactionContext</span>       <span class="com">// 一個 top-level transaction</span>
+│   └<span class="type">CurTransactionContext</span>    <span class="com">// 含 subtransaction</span>
+└<span class="type">PortalMemoryContext</span>         <span class="com">// 所有開啟的 portal</span>
+    └<span class="type">PortalContext</span>            <span class="com">// 一個 portal (一個 query 執行)</span>
+        ├<span class="type">PortalHeapMemory</span>      <span class="com">// portal 私用</span>
+        └<span class="type">ExecutorState</span>         <span class="com">// 一次 ExecutorStart → End</span>
+            ├<span class="type">ExprContext</span>       <span class="com">// per-expression evaluation</span>
+            │   └<span class="type">PerTupleMemory</span> <span class="com">// 每個 tuple reset 一次</span>
+            └<span class="type">TupleTableSlot</span>    <span class="com">// scan/join 中間結果</span>
+      </div>
+      <div class="flex-col" style="gap:0.45rem">
+        <div class="card accent-cyan" style="padding:0.6rem 0.95rem">
+          <h3 style="margin-bottom:0.2rem">長命 context (跨 query)</h3>
+          <ul class="bullet" style="font-size:0.86em">
+            <li><strong>TopMemoryContext</strong>, 整個 <span class="cyan">connection session</span> 的一生 (PG 一連線 = 一個 process);<span class="amber">放這裡 = leak</span> 直到 session 斷開</li>
+            <li><strong>CacheMemoryContext</strong>, catalog cache,extension 內建 lookup table 可放</li>
+            <li><strong>TopTransactionContext</strong>, transaction 結束時自動丟</li>
+          </ul>
+        </div>
+        <div class="card accent-magenta" style="padding:0.6rem 0.95rem">
+          <h3 style="margin-bottom:0.2rem">短命 context (per-query / per-tuple)</h3>
+          <ul class="bullet" style="font-size:0.86em">
+            <li><strong>MessageContext</strong>, 每收一個 client message reset,parser/analyzer 暫存放這</li>
+            <li><strong>PortalContext</strong>, 一個 cursor / query 執行週期</li>
+            <li><strong>ExecutorState</strong>, ExecutorStart 建、End 丟,FDW 的 fdw_state 通常配在這</li>
+            <li><strong>PerTupleMemory</strong>, <span class="cyan">每 tuple reset 一次</span>,expression 暫存的家</li>
+          </ul>
+        </div>
+        <div class="card accent-amber" style="padding:0.6rem 0.95rem">
+          <h3 style="margin-bottom:0.2rem">寫 extension 時的選擇題</h3>
+          <ul class="bullet" style="font-size:0.86em">
+            <li>UDF 的暫存 → <span class="inline-code">CurrentMemoryContext</span> 即可</li>
+            <li>跨 tuple 的 state → 用 <span class="inline-code">fcinfo->flinfo->fn_mcxt</span></li>
+            <li>FDW 的 connection / cursor → 在 <span class="inline-code">ExecutorState</span> 下自建子 context</li>
+            <li>長存的 lookup table → 自建掛在 <span class="inline-code">CacheMemoryContext</span></li>
+          </ul>
+        </div>
+      </div>
+    </div>
+    <div class="takeaway reveal">使用 palloc 前先確認記憶體的預期生命週期,即可決定應掛在哪個 context 之下;PG 的記憶體模型看完了,下一張對到 Rust 端, 看 ownership 跟 context 是兩種截然不同的釋放邏輯。</div>
+  </div>
+  <div class="chrome-bot"><span class="l">// pick the right parent context</span><span class="r">lifetime defines location</span></div>
+</section>
+
+<!-- ============== SLIDE 21 · Rust ownership ============== -->
+<section class="slide" id="s21">
+  <div class="chrome-top"><span class="l">memory.rust</span><span class="r page-no"></span></div>
+  <div class="slide-content">
+    <div class="slide-header reveal"><span class="num">// 4.2</span><h2>Rust 的記憶體模型 — <span class="accent">Ownership</span></h2></div>
+    <div class="grid-2 reveal">
+      <div class="card accent-cyan">
+        <h3>三條規則</h3>
+        <ol class="steps">
+          <li>每個 value 有 <strong>一個</strong> owner</li>
+          <li>同一時間 <strong>只能有一個</strong> owner</li>
+          <li>owner 離開 scope 時,value <strong>立即 drop</strong></li>
+        </ol>
+        <p style="margin-top:0.4rem;font-size:0.9em">編譯期 borrow checker 保證:<br>不會 leak · 不會 double-free · 不會 use-after-free</p>
+      </div>
+      <div class="code with-dots"><span class="kw">fn</span> <span class="fn">main</span>() {
+    <span class="kw">let</span> s1 = <span class="type">String</span>::<span class="fn">from</span>(<span class="str">"hello"</span>);
+    <span class="kw">let</span> s2 = s1;            <span class="com">// move: s1 不再有效</span>
+    <span class="com">// println!("{s1}");    // ← 編譯錯誤!</span>
+    <span class="fn">println!</span>(<span class="str">"{s2}"</span>);
+}                          <span class="com">// ← s2 drop,記憶體釋放</span>
+
+<span class="com">// 借用 (borrow) 可同時讀,但寫只能獨佔</span>
+<span class="kw">fn</span> <span class="fn">len</span>(s: &<span class="type">String</span>) -> <span class="type">usize</span> { s.<span class="fn">len</span>() }
+                           <span class="com">// 不取得所有權,結束後 caller 還能用</span></div>
+    </div>
+    <div class="card accent-magenta reveal" style="margin-top:0.6rem">
+      <h3>跟 PostgreSQL 的衝突點</h3>
+      <p><strong>PG 的指標通常由 MemoryContext 管理</strong>,生命週期跟著 context 走;但 Rust 看到 raw pointer 不知道誰是 owner。</p>
+      <p style="margin-top:0.3rem">↳ pgrx 必須在兩個模型之間 <strong>翻譯所有權</strong>, 這就是 <span class="inline-code">PgBox&lt;T, A&gt;</span> 的工作。</p>
+    </div>
+    <div class="takeaway reveal">PG 用 context 批次釋放、Rust 用 Drop 個別釋放;下一張看 pgrx 用 PgBox 與 leak_and_drop_on_delete 把這兩個模型對接起來。</div>
+  </div>
+  <div class="chrome-bot"><span class="l">// ownership: 1 owner, 1 lifetime</span><span class="r">checked at compile time</span></div>
+</section>
+
+
+<!-- ============== SLIDE 22b · leak_and_drop_on_delete ============== -->
+<section class="slide" id="s22">
+  <div class="chrome-top"><span class="l">memory.bridge</span><span class="r page-no"></span></div>
+  <div class="slide-content">
+    <div class="slide-header reveal"><span class="num">// 4.3</span><h2><span class="accent">PgBox&lt;T, A&gt;</span> + <span class="accent">leak_and_drop_on_delete</span></h2></div>
+    <p class="reveal" style="font-size:0.92em; color:var(--text-dim); margin-bottom:0.6rem">PG 用 MemoryContext 樹批次釋放,Rust 靠 Drop 個別釋放。pgrx 提供兩支 API 把這兩種模型接起來:<strong class="cyan">PgBox</strong> 在型別層宣告所有權歸誰,<strong class="cyan">leak_and_drop_on_delete</strong> 把 Drop 嫁接到 PG context 結束的時點。</p>
+
+    <div class="reveal" style="display:grid; grid-template-columns: 1fr 1fr; gap:1rem; align-items:stretch; flex:1; min-height:0">
+
+      <!-- 左欄: PgBox<T, A> -->
+      <div class="flex-col" style="gap:0.55rem; min-height:0">
+        <div class="card accent-magenta" style="padding:0.65rem 0.95rem">
+          <h3 style="margin-bottom:0.25rem; font-size:0.98em">PgBox&lt;T, A&gt; · 所有權編碼到型別</h3>
+          <ul class="bullet" style="font-size:0.85em">
+            <li><span class="inline-code">PgBox&lt;T, AllocatedByPostgres&gt;</span>:PG 配的指標,Rust drop 時不動</li>
+            <li><span class="inline-code">PgBox&lt;T, AllocatedByRust&gt;</span>:Rust 配的指標,drop 時 <span class="inline-code">pfree</span></li>
+            <li>從 C API 拿到 → <span class="inline-code">PgBox::from_pg(ptr)</span></li>
+            <li>Rust 端建構 → <span class="inline-code">PgBox::&lt;T&gt;::alloc()</span></li>
+            <li>交給 PG 管 → <span class="inline-code">.into_pg()</span></li>
+          </ul>
+        </div>
+        <div class="code" style="font-size:0.74em; padding:0.55rem 0.8rem; line-height:1.55">
+<span class="com">// 從 C API 拿指標</span>
+<span class="kw">unsafe</span> {
+  <span class="kw">let</span> tuple: <span class="type">PgBox</span>&lt;<span class="type">HeapTupleData</span>, <span class="type">AllocatedByPostgres</span>&gt;
+      = <span class="type">PgBox</span>::<span class="fn">from_pg</span>(raw_ptr);
+}
+<span class="com">// Rust 端配,交給 PG</span>
+<span class="kw">let</span> <span class="kw">mut</span> node = <span class="type">PgBox</span>::&lt;<span class="type">FdwState</span>&gt;::<span class="fn">alloc</span>();
+node.cursor = <span class="num">0</span>;
+<span class="kw">let</span> raw = node.<span class="fn">into_pg</span>();   <span class="com">// 移交</span>
+</div>
+      </div>
+
+      <!-- 右欄: leak_and_drop_on_delete -->
+      <div class="flex-col" style="gap:0.55rem; min-height:0">
+        <div class="card accent-cyan" style="padding:0.65rem 0.95rem">
+          <h3 style="margin-bottom:0.25rem; font-size:0.98em">leak_and_drop_on_delete · Drop 接到 context</h3>
+          <ul class="bullet" style="font-size:0.85em">
+            <li>Rust 物件的所有權「漏」進 PG context</li>
+            <li>同時註冊 memory context callback</li>
+            <li>context destroy → callback 觸發 → Rust Drop</li>
+            <li>適合跨整個 query 生命週期的 state(FDW、cursor)</li>
+          </ul>
+        </div>
+        <div class="code" style="font-size:0.74em; padding:0.55rem 0.8rem; line-height:1.55">
+<span class="com">// redis_fdw_rs 把 FDW state 綁進 context</span>
+<span class="kw">let</span> ctx = <span class="fn">create_wrappers_memctx</span>(
+    &amp;<span class="fn">format!</span>(<span class="str">"Wrappers_scan_{}"</span>,
+              foreigntableid.<span class="fn">to_u32</span>())
+);
+
+<span class="kw">let</span> <span class="kw">mut</span> state = <span class="type">RedisFdwState</span>::<span class="fn">new</span>(ctx);
+state.<span class="fn">connect</span>(server_opts)?;
+state.<span class="fn">setup_pushdown</span>(scan_clauses);
+
+<span class="com">// ★ 核心:把 state 綁進 context</span>
+<span class="kw">let</span> _ = <span class="type">PgMemoryContexts</span>::<span class="fn">For</span>(ctx)
+    .<span class="fn">leak_and_drop_on_delete</span>(state);
+<span class="com">// PG 結束 ExecutorState → Rust Drop 跑完:</span>
+<span class="com">//   Redis 連線歸還 pool, Vec 釋放</span>
+</div>
+      </div>
+    </div>
+
+    <div class="takeaway reveal">PgBox 在<strong>編譯期</strong>表達誰負責 free;leak_and_drop_on_delete 在<strong>執行期</strong>把 Drop 嵌進 PG context callback, 兩支 API 一前一後完整覆蓋兩種記憶體模型的協作;下一張看當這兩個模型在「錯誤路徑」相遇 (longjmp vs panic) 時,還需要 #[pg_guard] 補上另一層保險。</div>
+  </div>
+  <div class="chrome-bot"><span class="l">// PgBox &lt;T, A&gt; · leak_and_drop_on_delete</span><span class="r">compile-time + runtime bridge</span></div>
+</section>
+
+<!-- ============== SLIDE 23 · pg_guard / exception ============== -->
+<section class="slide" id="s23">
+  <div class="chrome-top"><span class="l">memory.exception</span><span class="r page-no"></span></div>
+  <div class="slide-content">
+    <div class="slide-header reveal"><span class="num">// 4.4</span><h2>#[pg_guard] — 雙向<span class="accent">異常翻譯閘</span></h2></div>
+    <div class="grid-2 reveal">
+      <div class="card accent-cyan">
+        <h3>問題:兩種錯誤模型</h3>
+        <ul class="bullet">
+          <li><strong>C / PG</strong>: <span class="inline-code">ereport(ERROR)</span> → <span class="inline-code">longjmp</span> 跳回最近的 <span class="inline-code">PG_TRY</span></li>
+          <li><strong>Rust</strong>: <span class="inline-code">panic!</span> → unwinding,跑 destructor</li>
+        </ul>
+        <p style="margin-top:0.4rem;font-size:0.9em">兩者同時發生會造成 <strong>UB</strong>:longjmp 跳過 Rust drop = leak;panic 跳過 PG 的 <span class="inline-code">elog</span> cleanup = corrupt state</p>
+      </div>
+      <div class="card accent-magenta">
+        <h3>解法:<span class="inline-code">#[pg_guard]</span></h3>
+        <p>pgrx 在所有 FFI 邊界自動套一層 guard,做兩件事:</p>
+        <ul class="bullet">
+          <li><strong>C → Rust</strong>: 把 PG 的 <span class="inline-code">PG_TRY</span> 包成 Rust 看得懂的 <span class="inline-code">Result</span></li>
+          <li><strong>Rust → C</strong>: 攔截 panic,翻譯成 <span class="inline-code">ereport(ERROR)</span></li>
+        </ul>
+      </div>
+    </div>
+    <div class="code with-dots reveal" style="margin-top:0.6rem"><span class="com">// 寫起來只是一個 attribute,但編譯期會生出一整層保護</span>
+<span class="mac">#[pg_guard]</span>
+<span class="kw">extern</span> <span class="str">"C"</span> <span class="kw">fn</span> <span class="fn">my_fdw_callback</span>(node: *<span class="kw">mut</span> ForeignScanState) {
+    <span class="com">// 不管 Rust 端 panic 還是 PG 那邊 elog(ERROR),</span>
+    <span class="com">// 都會被正確翻譯,不會破壞兩邊的記憶體狀態</span>
+}</div>
+    <div class="takeaway reveal">#[pg_guard] 是 pgrx 在 FFI 邊界放的一層保險;但它到底在擋什麼? 下兩張先把 longjmp 與 unwinding 各自的清理機制畫出來,再看撞在一起時 pg_guard 怎麼救。</div>
+  </div>
+  <div class="chrome-bot"><span class="l">// longjmp ↔ panic translation</span><span class="r">at every FFI boundary</span></div>
+</section>
+
+<!-- ============== SLIDE 23b · longjmp vs unwinding 對照 ============== -->
+<section class="slide" id="s23b">
+  <div class="chrome-top"><span class="l">memory.error-models</span><span class="r page-no"></span></div>
+  <div class="slide-content">
+    <div class="slide-header reveal"><span class="num">// 4.4b</span><h2><span class="accent">longjmp</span> vs <span class="accent">unwinding</span>, 兩種錯誤模型</h2></div>
+    <div class="reveal" style="display:grid; grid-template-columns: 1fr 1fr; gap:1rem; align-items:stretch; flex:1; min-height:0">
+
+      <!-- 左欄: PG longjmp -->
+      <div class="flex-col" style="gap:0.55rem; min-height:0">
+        <div class="card accent-cyan" style="padding:0.65rem 1rem">
+          <h3 style="margin-bottom:0.2rem; font-size:1em">C / PG, longjmp 模型</h3>
+          <p style="font-size:0.9em; line-height:1.55">遇到 <span class="inline-code">ereport(ERROR)</span> 時,<span class="inline-code">siglongjmp</span> 直接跳回最近的 <span class="inline-code">PG_TRY</span>。stack 上的所有 frame 被「跳過」,不跑任何清理, 全靠 <strong>MemoryContext 在 PG_CATCH 整批 reset</strong>。</p>
+        </div>
+        <div style="flex:1; display:flex; align-items:center; justify-content:center; background:linear-gradient(180deg,#0a0f1c,#060b18); border:1px solid var(--rule-strong); border-radius:10px; padding:0.6rem; min-height:0; overflow:auto">
+          <div class="mermaid" style="width:100%; max-height:54vh; text-align:center; color:#e6f7ff">
+flowchart TD
+  T["PG_TRY()"]
+  F1["frame A<br/>palloc(...)"]
+  F2["frame B<br/>open file"]
+  F3["frame C<br/>ereport(ERROR)"]
+  C["PG_CATCH()<br/>MemoryContextReset<br/>(整批清)"]
+  T --> F1 --> F2 --> F3
+  F3 -.->|"siglongjmp 跳過<br/>A、B、C 的 frame"| C
+  style T  fill:#0d3a52,stroke:#5cf0ff,color:#e6f7ff,stroke-width:2px
+  style F1 fill:#3d2a08,stroke:#ffb547,color:#fff4e1
+  style F2 fill:#3d2a08,stroke:#ffb547,color:#fff4e1
+  style F3 fill:#3d0d22,stroke:#ff5d8f,color:#fce4ec,stroke-width:2px
+  style C  fill:#0d3a52,stroke:#5cf0ff,color:#e6f7ff,stroke-width:2px
+          </div>
+        </div>
+        <div class="card accent-amber" style="padding:0.6rem 1rem">
+          <h3 style="margin-bottom:0.2rem; font-size:0.95em">特性</h3>
+          <ul class="bullet" style="font-size:0.88em; line-height:1.5">
+            <li>不跑 destructor、不跑 defer cleanup</li>
+            <li>清理責任在 MemoryContext 樹</li>
+            <li>速度快,但所有資源必須掛在 context 上</li>
+          </ul>
+        </div>
+      </div>
+
+      <!-- 右欄: Rust unwinding -->
+      <div class="flex-col" style="gap:0.55rem; min-height:0">
+        <div class="card accent-magenta" style="padding:0.65rem 1rem">
+          <h3 style="margin-bottom:0.2rem; font-size:1em">Rust, panic + unwinding</h3>
+          <p style="font-size:0.9em; line-height:1.55"><span class="inline-code">panic!()</span> 觸發 stack unwinding, runtime <strong>逐 frame 倒退</strong>,每個 frame 上 owned value <strong>呼叫 Drop</strong>:檔案關閉、connection 歸還、Vec 釋放, 最後在 <span class="inline-code">catch_unwind</span> 停下。</p>
+        </div>
+        <div style="flex:1; display:flex; align-items:center; justify-content:center; background:linear-gradient(180deg,#0a0f1c,#060b18); border:1px solid var(--rule-strong); border-radius:10px; padding:0.6rem; min-height:0; overflow:auto">
+          <div class="mermaid" style="width:100%; max-height:54vh; text-align:center; color:#e6f7ff">
+flowchart TD
+  CU["catch_unwind {"]
+  RA["frame A<br/>let v = Vec::new()"]
+  RB["frame B<br/>let f = File::open(..)"]
+  RC["frame C<br/>panic!()"]
+  CE["catch_unwind 邊界<br/>(回 Result::Err)"]
+  CU --> RA --> RB --> RC
+  RC -.->|"unwind: drop f<br/>(關閉檔案)"| RB
+  RB -.->|"unwind: drop v<br/>(釋放 Vec)"| RA
+  RA -.->|"unwind 結束"| CE
+  style CU fill:#3d0d22,stroke:#ff5d8f,color:#fce4ec,stroke-width:2px
+  style RA fill:#0d3a25,stroke:#7df0a0,color:#e8ffe9
+  style RB fill:#0d3a25,stroke:#7df0a0,color:#e8ffe9
+  style RC fill:#3d0d22,stroke:#ff5d8f,color:#fce4ec,stroke-width:2px
+  style CE fill:#3d0d22,stroke:#ff5d8f,color:#fce4ec,stroke-width:2px
+          </div>
+        </div>
+        <div class="card accent-amber" style="padding:0.6rem 1rem">
+          <h3 style="margin-bottom:0.2rem; font-size:0.95em">特性</h3>
+          <ul class="bullet" style="font-size:0.88em; line-height:1.5">
+            <li>每 frame 跑 Drop (RAII)</li>
+            <li>清理責任在每個型別自己</li>
+            <li>較慢但資源管理顆粒細</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="takeaway reveal">兩邊各自合理:PG 用 context 一次清,Rust 用 Drop 一格一格清。問題出在它們相遇的那一刻, 下一張看當這兩個模型在 FFI 邊界撞上會發生什麼。</div>
+  </div>
+  <div class="chrome-bot"><span class="l">// longjmp = skip frames; unwind = drop frames</span><span class="r">two models, side by side</span></div>
+</section>
+
+<!-- ============== SLIDE 23c · FFI 邊界撞擊 + pg_guard 解法 ============== -->
+<section class="slide" id="s23c">
+  <div class="chrome-top"><span class="l">memory.ffi-collision-and-guarantees</span><span class="r page-no"></span></div>
+  <div class="slide-content">
+    <div class="slide-header reveal"><span class="num">// 4.5</span><h2>FFI 邊界的 <span class="accent">#[pg_guard]</span> × pgrx <span class="accent">安全保證的邊界</span></h2></div>
+
+    <!-- 上排:撞擊 + 解法 + code -->
+    <div class="reveal" style="display:grid; grid-template-columns: 1fr 1fr; gap:1rem; align-items:stretch; min-height:0">
+
+      <!-- 左:撞擊兩個方向 + #[pg_guard] 解法 -->
+      <div class="flex-col" style="gap:0.5rem; min-height:0">
+        <div class="card accent-magenta" style="padding:0.55rem 0.9rem">
+          <h3 style="margin-bottom:0.15rem; font-size:0.92em">longjmp 跳過 Rust frame</h3>
+          <p style="font-size:0.82em; line-height:1.5">PG <span class="inline-code">ereport(ERROR)</span> 一發 siglongjmp 跳過 Rust 函式, <strong>Drop 不跑</strong>, File 不關、Connection 不還、Vec leak。</p>
+        </div>
+        <div class="card accent-magenta" style="padding:0.55rem 0.9rem">
+          <h3 style="margin-bottom:0.15rem; font-size:0.92em">panic 跳過 C frame</h3>
+          <p style="font-size:0.82em; line-height:1.5">Rust <span class="inline-code">panic!</span> 沒被攔下就回 C,PG 的 MemoryContextSwitchTo 還沒切回上層, backend 全域狀態 UB。</p>
+        </div>
+        <div class="card accent-cyan" style="padding:0.55rem 0.9rem">
+          <h3 style="margin-bottom:0.15rem; font-size:0.92em"><span class="inline-code">#[pg_guard]</span> 雙向轉譯</h3>
+          <ul class="bullet" style="font-size:0.82em; line-height:1.5">
+            <li>Rust → C 出去:catch panic → <span class="inline-code">ereport(ERROR)</span></li>
+            <li>C → Rust 進來:longjmp 接住 → <span class="inline-code">Result::Err</span></li>
+            <li>兩邊清理機制都能正常觸發</li>
+          </ul>
+        </div>
+      </div>
+
+      <!-- 右:Cargo.toml + FDW callback code -->
+      <div class="flex-col" style="gap:0.5rem; min-height:0">
+        <div class="code" style="font-size:0.78em; padding:0.55rem 0.85rem; line-height:1.5"><span class="com"># Cargo.toml — panic 必須是 unwind</span>
+[<span class="type">profile.dev</span>]
+panic = <span class="str">"unwind"</span>
+[<span class="type">profile.release</span>]
+panic = <span class="str">"unwind"</span></div>
+        <div class="code" style="font-size:0.78em; padding:0.55rem 0.85rem; line-height:1.5"><span class="com">// FDW callback 標準寫法</span>
+<span class="mac">#[pg_guard]</span>
+<span class="kw">extern</span> <span class="str">"C-unwind"</span> <span class="kw">fn</span> <span class="fn">begin_foreign_scan</span>(
+    node: *<span class="kw">mut</span> <span class="type">ForeignScanState</span>,
+    eflags: <span class="type">c_int</span>,
+) {
+    <span class="com">// panic / ? 都安全,pgrx 翻成</span>
+    <span class="com">// PG ERROR,Drop 仍會跑完</span>
+}</div>
+      </div>
+    </div>
+
+    <!-- 下排:安全邊界對照 -->
+    <div class="reveal" style="display:grid; grid-template-columns: 1fr 1fr; gap:1rem; margin-top:0.55rem">
+      <div class="card accent-cyan" style="padding:0.6rem 0.95rem">
+        <h3 style="margin-bottom:0.2rem; font-size:0.95em">編譯期就能保證的</h3>
+        <ul class="bullet" style="font-size:0.84em; line-height:1.5">
+          <li>Rust 端配的記憶體不會 leak / double-free / dangling</li>
+          <li>所有權清楚, 誰負責 drop 是型別的事</li>
+          <li>panic 不會穿過 FFI 邊界</li>
+          <li>thread safety(PG backend 本來就單執行緒)</li>
+        </ul>
+      </div>
+      <div class="card accent-magenta" style="padding:0.6rem 0.95rem">
+        <h3 style="margin-bottom:0.2rem; font-size:0.95em">仍需開發者注意的</h3>
+        <ul class="bullet" style="font-size:0.84em; line-height:1.5">
+          <li>C API 拿到的 pointer 若被 PG 提前釋放, 無法靜態檢查</li>
+          <li>跨 MemoryContext 持有指標(context reset 後失效)</li>
+          <li><span class="inline-code">unsafe</span> 區塊(直接戳 <span class="inline-code">pg_sys::*</span>)</li>
+          <li>SHMEM / shared state 仍要自己加 lock</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="takeaway reveal">#[pg_guard] 解掉錯誤模型在 FFI 邊界的衝突;但 pgrx 只把「純 Rust 那一半」變得跟 idiomatic Rust 一樣安全, <strong>跟 PG 互動那一半</strong>(MemoryContext、unsafe、SHMEM)仍要懂 PG, 下一段把這條界線換成「實戰收益與代價」來談。</div>
+  </div>
+  <div class="chrome-bot"><span class="l">// pg_guard bridges; safety ≠ ignorance</span><span class="r">half the mines are gone</span></div>
+</section>
+
+<!-- ============== SECTION 5 · TRADE-OFFS ============== -->
+<section class="slide section-slide" id="s25">
+  <div class="chrome-top"><span class="l">section.05</span><span class="r page-no"></span></div>
+  <div class="slide-content">
+    <span class="sec-num reveal">SECTION 05</span>
+    <h2 class="sec-title reveal">用 pgrx 的<br><span class="accent">代價與收益</span></h2>
+    <p class="sec-desc reveal">評估 pgrx 的限制與適用場景,跟了解它的能力同樣重要。</p>
+  </div>
+  <div class="chrome-bot"><span class="l">// pros, cons, when-to-pick</span><span class="r">no silver bullet</span></div>
+</section>
+
+<!-- ============== SLIDE 26 · pros/cons ============== -->
+<section class="slide" id="s26">
+  <div class="chrome-top"><span class="l">tradeoffs.detail</span><span class="r page-no"></span></div>
+  <div class="slide-content">
+    <div class="slide-header reveal"><span class="num">// 5.1</span><h2>Pros 與 Cons — 來自實戰</h2></div>
+    <div class="grid-2 reveal">
+      <div class="card accent-cyan">
+        <h3 class="cyan">Yes Pros (收益)</h3>
+        <ul class="bullet">
+          <li><strong>記憶體安全</strong>: 降低 segfault 與 production 故障風險</li>
+          <li><strong>開發速度 2–3×</strong>: cargo + 自動 SQL + 整合測試</li>
+          <li><strong>強型別生態</strong>: serde / tokio (有限) / clap 都能用</li>
+          <li><strong>cargo pgrx test</strong>: 在真 PG 裡跑單元測試</li>
+          <li><strong>自動 multi-version build</strong>: 同一份原始碼編 PG 13–17</li>
+          <li><strong>跨平台</strong>: Linux / macOS 一致工具鏈</li>
+        </ul>
+      </div>
+      <div class="card accent-magenta">
+        <h3 class="magenta">Cons (代價)</h3>
+        <ul class="bullet">
+          <li><strong>學習曲線陡</strong>: Rust + PG 內部 + pgrx 三層都要懂</li>
+          <li><strong>三套 memory model</strong>: C/PG · Rust · pgrx 橋接</li>
+          <li><strong>無法指定 minor version</strong> 或 master branch</li>
+          <li><strong>不支援 pg_regress</strong>: SQL-level regression test 要自己搞</li>
+          <li><strong>文件較少</strong>: 比起 C extension 累積二十年的資料,還是吃虧</li>
+          <li><strong>GIN/GiST/SP-GiST</strong> 無自動 SQL 生成</li>
+        </ul>
+      </div>
+    </div>
+    <div class="card accent-amber reveal" style="margin-top:0.6rem">
+      <h3>什麼時候 <strong class="amber">不要</strong> 用 pgrx?</h3>
+      <p>① 團隊沒有 Rust 經驗,且只寫一個小 UDF, 學習成本不划算<br>② 需要追 PG master branch 或某個 minor version, pgrx 只支援已 release 的主版本<br>③ 主要工作是 GIN/GiST 自訂索引, 自動 SQL 生成不適用,優勢縮水</p>
+    </div>
+    <div class="takeaway reveal">用 pgrx 的天花板還是「會不會 PG」;接下來進 §6,用 redis_fdw_rs 這個實際 production extension 把前面五段串起來看一次。</div>
+  </div>
+  <div class="chrome-bot"><span class="l">// pros = 6, cons = 6, balance = your call</span><span class="r">pick wisely</span></div>
+</section>
+
+<!-- ============== SECTION 6 · redis_fdw_rs ============== -->
+<section class="slide section-slide" id="s27">
+  <div class="chrome-top"><span class="l">section.06</span><span class="r page-no"></span></div>
+  <div class="slide-content">
+    <span class="sec-num reveal">SECTION 06</span>
+    <h2 class="sec-title reveal">實戰拆解<br><span class="accent">redis_fdw_rs</span></h2>
+    <p class="sec-desc reveal">把 Redis 接到 PostgreSQL,用 SQL 查 hash / list / set / zset, 一個 Rust + pgrx 寫出來的 FDW。</p>
+  </div>
+  <div class="chrome-bot"><span class="l">github.com/isdaniel/redis_fdw_rs</span><span class="r">FDW = structured hook</span></div>
+</section>
+
+<!-- ============== SLIDE 28 · FDW concept ============== -->
+<section class="slide" id="s28">
+  <div class="chrome-top"><span class="l">fdw.concept</span><span class="r page-no"></span></div>
+  <div class="slide-content">
+    <div class="slide-header reveal"><span class="num">// 6.1</span><h2>FDW = <span class="accent">結構化的 Hook</span></h2></div>
+    <div class="grid-2 reveal">
+      <div class="card accent-cyan">
+        <h3>普通 hook</h3>
+        <p>「我給你一個函式指標,你想做什麼自己處理。」<br>自由 → 但全靠你寫對。</p>
+      </div>
+      <div class="card accent-magenta">
+        <h3>FDW</h3>
+        <p>PG 給你一張 <strong>callback 清單</strong> (FdwRoutine),你只要把每個 callback 填好,PG 自動接管 plan / execute / DML。</p>
+      </div>
+    </div>
+    <div class="code with-dots reveal" style="margin-top:0.6rem;font-size:0.78em"><span class="com">// src/include/foreign/fdwapi.h</span>
+<span class="kw">typedef struct</span> <span class="type">FdwRoutine</span> {
+    <span class="com">/* === Scan (SELECT) === */</span>
+    <span class="fn">GetForeignRelSize_function</span>      GetForeignRelSize;        <span class="com">// 估 row count</span>
+    <span class="fn">GetForeignPaths_function</span>        GetForeignPaths;          <span class="com">// 出 access path</span>
+    <span class="fn">GetForeignPlan_function</span>         GetForeignPlan;           <span class="com">// 包成 ForeignScan</span>
+    <span class="fn">BeginForeignScan_function</span>       BeginForeignScan;         <span class="com">// 連線 / 初始化</span>
+    <span class="fn">IterateForeignScan_function</span>     IterateForeignScan;       <span class="com">// 拉下一個 tuple</span>
+    <span class="fn">ReScanForeignScan_function</span>      ReScanForeignScan;
+    <span class="fn">EndForeignScan_function</span>         EndForeignScan;           <span class="com">// 清理</span>
+    <span class="com">/* === DML (INSERT/UPDATE/DELETE) === */</span>
+    <span class="fn">AddForeignUpdateTargets_function</span> AddForeignUpdateTargets;
+    <span class="fn">PlanForeignModify_function</span>      PlanForeignModify;
+    <span class="fn">BeginForeignModify_function</span>     BeginForeignModify;
+    <span class="fn">ExecForeignInsert_function</span>      ExecForeignInsert;
+    <span class="fn">ExecForeignUpdate_function</span>      ExecForeignUpdate;
+    <span class="fn">ExecForeignDelete_function</span>      ExecForeignDelete;
+    <span class="fn">EndForeignModify_function</span>       EndForeignModify;
+    <span class="com">/* === EXPLAIN / ANALYZE 等等... === */</span>
+} <span class="type">FdwRoutine</span>;</div>
+    <div class="takeaway reveal">FDW 是 PostgreSQL 為外部資料源提供的完整介面契約,實作對應的 callback 後,執行流程交由 PG 接管;下一張用 redis_fdw_rs 的實作把這張 vtable 攤平,看 SELECT / JOIN / DML 三條路徑分別觸發哪些 callback。</div>
+  </div>
+  <div class="chrome-bot"><span class="l">// fdwapi.h: a checklist, not freedom</span><span class="r">fill in the callbacks</span></div>
+</section>
+
+<!-- ============== SLIDE 28b · FDW Lifecycle ============== -->
+<section class="slide" id="s28b">
+  <div class="chrome-top"><span class="l">redis-fdw.lifecycle</span><span class="r page-no"></span></div>
+  <div class="slide-content">
+    <div class="slide-header reveal" style="margin-bottom:0.5rem"><span class="num">// 6.2</span><h2>FDW <span class="accent">Lifecycle</span></h2></div>
+    <div class="reveal" style="display:grid; grid-template-columns: 1.85fr 1fr; gap:1rem; align-items:stretch; flex:1; min-height:0">
+      <div style="display:flex; align-items:center; justify-content:center; background:linear-gradient(180deg,#0a0f1c,#060b18); border:1px solid var(--rule-strong); border-radius:12px; padding:0.6rem; min-height:0; overflow:hidden">
+        <div class="mermaid fit-svg" style="width:100%; height:100%; text-align:center; color:#e6f7ff">
+flowchart TD
+  subgraph LC ["PostgreSQL Query Lifecycle"]
+    direction LR
+    PARSE["Parse SQL"]
+    PLAN["Plan (Optimizer)"]
+    EXEC["Execute"]
+    CLEANUP["Cleanup"]
+    PARSE --> PLAN --> EXEC --> CLEANUP
+  end
+
+  subgraph SEL ["SELECT path"]
+    direction TB
+    P1["GetForeignRelSize<br/>連 Redis 取統計，立即釋放連線"]
+    P2["GetForeignPaths<br/>註冊掃描路徑 + cost"]
+    P3["GetForeignPlan<br/>序列化 state 到 plan node"]
+    E1["BeginForeignScan<br/>從 pool 重新取得連線"]
+    E2["IterateForeignScan × N<br/>每次回傳一筆 tuple"]
+    C1["ShutdownForeignScan<br/>釋放連線回 pool"]
+    C2["EndForeignScan<br/>銷毀 MemoryContext"]
+    P1 --> P2 --> P3 --> E1 --> E2 --> C1 --> C2
+  end
+
+  subgraph JN ["JOIN path (FDW-to-FDW, same server)"]
+    direction TB
+    JP1["GetForeignRelSize × 2<br/>兩張表各取一次統計"]
+    JP2["GetForeignPaths × 2"]
+    JP3["GetForeignJoinPaths × 2<br/>檢查同 server、非 multi-key<br/>提取 join columns、算 cost"]
+    JP4["GetForeignPlan<br/>序列化兩表 state + join info"]
+    JE1["BeginForeignScan (scanrelid = 0)<br/>取得連線、轉移給 JoinState"]
+    JE2["IterateForeignScan × N<br/>首次：fetch 兩表 + hash join<br/>後續：逐行回傳結果"]
+    JC1["ShutdownForeignScan<br/>釋放連線"]
+    JC2["EndForeignScan<br/>銷毀 context"]
+    JP1 --> JP2 --> JP3 --> JP4 --> JE1 --> JE2 --> JC1 --> JC2
+  end
+
+  subgraph DML ["INSERT / UPDATE / DELETE path"]
+    direction TB
+    MP0["IsForeignRelUpdatable<br/>檢查權限 bitmask"]
+    MP1["PlanForeignModify<br/>建立連線 + 設定 table type"]
+    ME1["BeginForeignModify<br/>找 key column"]
+    ME2["GetForeignModifyBatchSize<br/>(batch 時回傳批次大小)"]
+    ME3["ExecForeignInsert / Update / Delete × N<br/>或 ExecForeignBatchInsert × N"]
+    MC1["EndForeignModify<br/>銷毀 context"]
+    MP0 --> MP1 --> ME1 --> ME2 --> ME3 --> MC1
+  end
+
+  PLAN -.-> P1
+  PLAN -.-> JP1
+  PLAN -.-> MP0
+  EXEC -.-> E1
+  EXEC -.-> JE1
+  EXEC -.-> ME1
+
+  style PARSE   fill:#0a1f3a,stroke:#5b8cff,color:#dce8ff
+  style PLAN    fill:#0a1f3a,stroke:#5b8cff,color:#dce8ff
+  style EXEC    fill:#0a1f3a,stroke:#5b8cff,color:#dce8ff
+  style CLEANUP fill:#2a0d3d,stroke:#c8a8ff,color:#f3e5f5
+
+  style P1 fill:#0d3a25,stroke:#7df0a0,color:#e8ffe9
+  style P2 fill:#0d3a25,stroke:#7df0a0,color:#e8ffe9
+  style P3 fill:#0d3a25,stroke:#7df0a0,color:#e8ffe9
+  style E1 fill:#0d3a25,stroke:#7df0a0,color:#e8ffe9
+  style E2 fill:#0d3a25,stroke:#7df0a0,color:#e8ffe9
+  style C1 fill:#0d3a25,stroke:#7df0a0,color:#e8ffe9
+  style C2 fill:#0d3a25,stroke:#7df0a0,color:#e8ffe9
+
+  style JP1 fill:#1a3a52,stroke:#5cf0ff,color:#d6f4ff
+  style JP2 fill:#1a3a52,stroke:#5cf0ff,color:#d6f4ff
+  style JP3 fill:#1a3a52,stroke:#5cf0ff,color:#d6f4ff
+  style JP4 fill:#1a3a52,stroke:#5cf0ff,color:#d6f4ff
+  style JE1 fill:#1a3a52,stroke:#5cf0ff,color:#d6f4ff
+  style JE2 fill:#1a3a52,stroke:#5cf0ff,color:#d6f4ff
+  style JC1 fill:#1a3a52,stroke:#5cf0ff,color:#d6f4ff
+  style JC2 fill:#1a3a52,stroke:#5cf0ff,color:#d6f4ff
+
+  style MP0 fill:#3d0d22,stroke:#ff5d8f,color:#fce4ec
+  style MP1 fill:#3d0d22,stroke:#ff5d8f,color:#fce4ec
+  style ME1 fill:#3d0d22,stroke:#ff5d8f,color:#fce4ec
+  style ME2 fill:#3d0d22,stroke:#ff5d8f,color:#fce4ec
+  style ME3 fill:#3d0d22,stroke:#ff5d8f,color:#fce4ec
+  style MC1 fill:#3d0d22,stroke:#ff5d8f,color:#fce4ec
+</div>
+      </div>
+      <div class="flex-col" style="gap:0.5rem">
+        <div class="card" style="padding:0.6rem 0.9rem; border-left:3px solid #5b8cff">
+          <h3 style="margin-bottom:0.15rem; font-size:0.95em; color:#5b8cff">主流程</h3>
+          <p style="font-size:0.85em">所有 SQL 都走 Parse → Plan → Execute → Cleanup。FDW callback 在 Plan 與 Execute 階段被觸發。</p>
+        </div>
+        <div class="card" style="padding:0.6rem 0.9rem; border-left:3px solid #7df0a0">
+          <h3 style="margin-bottom:0.15rem; font-size:0.95em; color:#7df0a0">SELECT 路徑</h3>
+          <p style="font-size:0.85em">RelSize 取完統計立即釋放連線;Begin 重新從 pool 取得,Iterate 每次回一個 tuple,Shutdown 歸還連線。</p>
+        </div>
+        <div class="card" style="padding:0.6rem 0.9rem; border-left:3px solid #5cf0ff">
+          <h3 style="margin-bottom:0.15rem; font-size:0.95em; color:#5cf0ff">JOIN</h3>
+          <p style="font-size:0.85em">兩表同 server 時,GetForeignJoinPaths 提取 join columns;首次 Iterate 才 fetch 兩表並執行記憶體 hash join。</p>
+        </div>
+        <div class="card" style="padding:0.6rem 0.9rem; border-left:3px solid #ff5d8f">
+          <h3 style="margin-bottom:0.15rem; font-size:0.95em; color:#ff5d8f">DML 路徑</h3>
+          <p style="font-size:0.85em">PlanForeignModify 先建連線、決定 table type;Exec*(× N rows)逐筆下 Redis 命令,batch 模式走 BatchInsert pipeline。</p>
+        </div>
+        <div class="card accent-cyan" style="padding:0.6rem 0.9rem">
+          <h3 style="margin-bottom:0.15rem; font-size:0.95em">補充</h3>
+          <p style="font-size:0.85em"><span class="inline-code">TRUNCATE</span> 不走 Planning,直接呼叫 ExecForeignTruncate;<span class="inline-code">EXPLAIN</span> 只跑 Planning,加 ANALYZE 才接著跑 Execute。</p>
+        </div>
+      </div>
+
+    </div>
+  </div>
+  <div class="chrome-bot"><span class="l">// 3 paths: SELECT · JOIN · DML</span><span class="r">FdwRoutine = a vtable</span></div>
+</section>
+
+<!-- ============== SLIDE 28c · WHERE Pushdown ============== -->
+<section class="slide" id="s28c">
+  <div class="chrome-top"><span class="l">redis-fdw.pushdown</span><span class="r page-no"></span></div>
+  <div class="slide-content">
+    <div class="slide-header reveal"><span class="num">// 6.3</span><h2>WHERE <span class="accent">Pushdown</span> — 把過濾推到 Redis</h2></div>
+    <div class="grid-2 reveal" style="align-items:start">
+      <div class="card accent-magenta">
+        <h3 class="magenta">— 沒 pushdown:抓全部再過濾</h3>
+        <div class="code" style="font-size:0.78em;padding:0.7rem 0.9rem">
+<span class="kw">SELECT</span> value <span class="kw">FROM</span> user_profiles
+ <span class="kw">WHERE</span> field = <span class="str">'email'</span>;
+
+<span class="com">-- FDW → Redis:</span>
+HGETALL user:1            <span class="com">-- 100 個 field 都拉</span>
+<span class="com">-- 然後 PG 自己過濾出 email = ?</span></div>
+        <p style="font-size:0.86em; margin-top:0.4rem">資料量 N 個 field → <strong class="amber">O(N) 網路傳輸</strong>,大表更慘。</p>
+      </div>
+      <div class="card accent-cyan">
+        <h3 class="cyan">Yes 有 pushdown:Redis 直接給答案</h3>
+        <div class="code" style="font-size:0.78em;padding:0.7rem 0.9rem">
+<span class="kw">SELECT</span> value <span class="kw">FROM</span> user_profiles
+ <span class="kw">WHERE</span> field = <span class="str">'email'</span>;
+
+<span class="com">-- FDW → Redis:</span>
+HGET user:1 email         <span class="com">-- O(1),只回一筆</span></div>
+        <p style="font-size:0.86em; margin-top:0.4rem">FDW 從 plan 抽出 quals,翻成 <strong>Redis-native 命令</strong>。</p>
+      </div>
+    </div>
+    <div class="reveal" style="margin-top:0.6rem">
+      <h3 style="color:var(--text); font-size:var(--h3-size); margin-bottom:0.4rem">redis_fdw_rs 支援的 pushdown 對照表</h3>
+      <table style="font-size:0.88em">
+        <thead><tr><th>Type</th><th>SQL Predicate</th><th>Redis Command</th><th>複雜度</th></tr></thead>
+        <tbody>
+          <tr><td>Hash</td><td><span class="inline-code">field = 'x'</span></td><td><span class="mono cyan">HGET key x</span></td><td>O(1)</td></tr>
+          <tr><td>Hash</td><td><span class="inline-code">field IN ('a','b','c')</span></td><td><span class="mono cyan">HMGET key a b c</span></td><td>O(N) — N 是 IN 集合大小</td></tr>
+          <tr><td>Set</td><td><span class="inline-code">EXISTS … WHERE member = 'x'</span></td><td><span class="mono cyan">SISMEMBER key x</span></td><td>O(1)</td></tr>
+          <tr><td>String</td><td><span class="inline-code">key = 'foo'</span> (multi-key)</td><td><span class="mono cyan">GET foo</span></td><td>O(1)</td></tr>
+          <tr><td>String</td><td><span class="inline-code">key IN ('a','b')</span></td><td><span class="mono cyan">MGET a b</span></td><td>O(N)</td></tr>
+          <tr><td>String</td><td><span class="inline-code">key LIKE '555%'</span></td><td><span class="mono cyan">SCAN MATCH 555*</span></td><td>O(N) — 但 cursor 分批</td></tr>
+          <tr><td>ZSet</td><td><span class="inline-code">score &gt;= ?, score &lt;= ?</span></td><td><span class="mono cyan">ZRANGEBYSCORE</span></td><td>O(log N + M)</td></tr>
+          <tr><td>—</td><td><span class="inline-code">LIMIT n</span></td><td>傳給對應的 Range / Iter 命令</td><td>提早結束</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="takeaway reveal">Pushdown 的目的是把 PG plan 中的 quals 翻譯成 Redis 原生命令,降低不必要的網路傳輸。</div>
+  </div>
+  <div class="chrome-bot"><span class="l">// quals → redis-native command</span><span class="r">avoid HGETALL when HGET works</span></div>
+</section>
+
+
+<!-- ============== SLIDE 30b · 進階特性 ============== -->
+<section class="slide" id="s30b">
+  <div class="chrome-top"><span class="l">redis-fdw.advanced</span><span class="r page-no"></span></div>
+  <div class="slide-content">
+    <div class="slide-header reveal"><span class="num">// 6.4</span><h2>進階特性</h2></div>
+    <div class="grid-4 reveal">
+      <div class="card accent-cyan"><h3>① Connection Pool</h3><p>R2D2 池化,可調 <span class="inline-code">pool_max_size</span>、<span class="inline-code">min_idle</span>、<span class="inline-code">connection_timeout</span>、<span class="inline-code">max_lifetime</span>、<span class="inline-code">idle_timeout</span>。Planning 階段短借短還。</p></div>
+      <div class="card accent-cyan"><h3>② Redis Cluster</h3><p>多節點 <span class="inline-code">host_port '7001,7002,7003'</span>,自動 sharding + failover。MOVED/ASK redirect 透明處理。</p></div>
+      <div class="card accent-cyan"><h3>③ TLS / SSL</h3><p>URI scheme <span class="inline-code">rediss://</span> 啟用 rustls,fragment <span class="inline-code">#insecure</span> 跳過憑證驗證(dev 用)。<span class="cyan">無 OpenSSL 依賴</span>。</p></div>
+      <div class="card accent-cyan"><h3>④ DDL Validator</h3><p>自實作 FDW <span class="inline-code">VALIDATOR</span>, CREATE FOREIGN TABLE 當下就驗 options,不等到 query 才爆。</p></div>
+      <div class="card accent-magenta"><h3>⑤ TTL 支援</h3><p>表級 <span class="inline-code">ttl '3600'</span> 預設過期;加 <span class="inline-code">ttl bigint</span> 虛擬欄位可逐 row 覆寫,SELECT 看剩餘秒數。</p></div>
+      <div class="card accent-magenta"><h3>⑥ Multi-key Glob</h3><p><span class="inline-code">table_key_prefix 'user:*'</span> 自動轉 SCAN MATCH 模式;<span class="inline-code">key</span> 變第一個 column。</p></div>
+      <div class="card accent-magenta"><h3>⑦ Batch INSERT</h3><p>實作 <span class="inline-code">ExecForeignBatchInsert</span>,多 row INSERT 自動 pipeline 給 Redis,可調 <span class="inline-code">batch_size</span>。</p></div>
+      <div class="card accent-magenta"><h3>⑧ TRUNCATE</h3><p>單 key → <span class="inline-code">UNLINK</span>;multi-key 模式 → <span class="inline-code">SCAN + UNLINK</span> 批次清。</p></div>
+      <div class="card accent-amber"><h3>⑨ ANALYZE</h3><p>實作 <span class="inline-code">analyze_foreign_table</span>,planner 拿到真實 cardinality(HLEN/SCARD/ZCARD/LLEN),選對 join 策略。</p></div>
+      <div class="card accent-amber"><h3>⑩ COPY FROM</h3><p>大量載入走 <span class="inline-code">begin_foreign_insert</span>,可用 <span class="inline-code">COPY tbl FROM stdin</span> 或 <span class="inline-code">INSERT … SELECT</span>。</p></div>
+      <div class="card accent-amber"><h3>⑪ FDW-to-FDW JOIN</h3><p>同 server 兩張 redis 表 INNER/LEFT JOIN, 單連線抓兩邊 + <span class="cyan">in-memory hash join</span> + OOM 守門 (500K rows)。</p></div>
+    </div>
+
+  </div>
+  <div class="chrome-bot"><span class="l">// 11 advanced features actually shipped</span><span class="r">PG 14 → 18</span></div>
+</section>
+
+<!-- ============== SLIDE 31 · DEMO ============== -->
+<section class="slide" id="s31">
+  <div class="chrome-top"><span class="l">redis-fdw.demo</span><span class="r page-no"></span></div>
+  <div class="slide-content">
+    <div class="slide-header reveal"><span class="num">// 6.5</span><h2>Demo Time — <span class="accent">SQL × Redis</span></h2></div>
+    <div class="grid-2 reveal" style="align-items:start">
+      <div class="terminal" style="font-size:0.74em">
+<div class="prompt">cargo pgrx run pg17    <span class="warn"># or pg14/15/16/18</span></div>
+<div class="out">  building <span class="ok">redis_fdw_rs</span> ...</div>
+<div class="out">  psql (17.4)</div>
+<div class="out"><span class="ok">postgres=#</span> CREATE EXTENSION redis_fdw_rs;</div>
+<div class="out"><span class="ok">postgres=#</span> CREATE FOREIGN DATA WRAPPER redis_wrapper</div>
+<div class="out">             HANDLER   redis_fdw_handler</div>
+<div class="out">             VALIDATOR redis_fdw_validator;</div>
+<div class="out"><span class="ok">postgres=#</span> CREATE SERVER redis_server</div>
+<div class="out">             FOREIGN DATA WRAPPER redis_wrapper</div>
+<div class="out">             OPTIONS (host_port '127.0.0.1:6379',</div>
+<div class="out">                      pool_max_size '32');</div>
+<div class="out"></div>
+<div class="out"><span class="warn"># --- Hash with TTL + WHERE pushdown ---</span></div>
+<div class="out"><span class="ok">postgres=#</span> CREATE FOREIGN TABLE user_profile</div>
+<div class="out">             (field text, value text)</div>
+<div class="out">             SERVER redis_server OPTIONS</div>
+<div class="out">             (table_type 'hash',</div>
+<div class="out">              table_key_prefix 'user:1',</div>
+<div class="out">              ttl '3600');</div>
+<div class="out"><span class="ok">postgres=#</span> INSERT INTO user_profile VALUES</div>
+<div class="out">             ('name','Alice'),('email','a@x.io');</div>
+<div class="out"><span class="ok">postgres=#</span> SELECT * FROM user_profile</div>
+<div class="out">             WHERE field = 'email';     <span class="warn">-- HGET</span></div>
+<div class="out"></div>
+<div class="out"><span class="warn"># --- Multi-key glob + JOIN pushdown ---</span></div>
+<div class="out"><span class="ok">postgres=#</span> CREATE FOREIGN TABLE all_users</div>
+<div class="out">             (key text, value text)</div>
+<div class="out">             SERVER redis_server OPTIONS</div>
+<div class="out">             (table_type 'string',</div>
+<div class="out">              table_key_prefix 'user:*');</div>
+<div class="out"><span class="ok">postgres=#</span> EXPLAIN VERBOSE</div>
+<div class="out">             SELECT u.value, t.member FROM all_users u</div>
+<div class="out">             JOIN user_tags t ON u.key = t.member;</div>
+<div class="out">  Foreign Scan</div>
+<div class="out">    Output: u.value, t.member</div>
+<div class="out">    Relations: (all_users u) INNER JOIN (user_tags t)</div>
+<div class="out">    Redis Join: same-server hash join (pushed down)</div>
+      </div>
+      <div class="flex-col" style="gap:0.45rem">
+        <div class="card accent-cyan">
+          <h3>Demo 想展示的 5 件事</h3>
+          <ol class="steps">
+            <li><strong>HANDLER + VALIDATOR</strong>, 完整 FDW 註冊三件套</li>
+            <li><strong>Pool options</strong>, server 階就決定連線池大小</li>
+            <li><strong>WHERE pushdown</strong>, EXPLAIN 看到 HGET 不是 HGETALL</li>
+            <li><strong>TTL 自動過期</strong>, 表級 + per-row 兩種寫法</li>
+            <li><strong>Multi-key + JOIN pushdown</strong>, 同 server 兩表 hash join</li>
+          </ol>
+        </div>
+        <div class="card accent-magenta">
+          <h3>進階 demo 候選</h3>
+          <ul class="bullet" style="font-size:0.9em">
+            <li><span class="inline-code">COPY tbl FROM '/data.csv'</span> 寫進 Redis</li>
+            <li><span class="inline-code">rediss://</span> + cluster (3-node)</li>
+            <li><span class="inline-code">EXPLAIN ANALYZE</span> 看 batch insert 速度</li>
+          </ul>
+        </div>
+        <div class="card accent-amber" style="padding:0.65rem 0.9rem">
+          <h3 style="margin-bottom:0.2rem">Try it</h3>
+          <p class="mono" style="font-size:0.85em;color:var(--text)">github.com/isdaniel/redis_fdw_rs</p>
+          <p style="font-size:0.83em;margin-top:0.2rem">apt repo 有 PG 14–18 的 prebuilt deb,Ubuntu 22/24 + Debian 11/12 amd64。</p>
+        </div>
+      </div>
+    </div>
+
+  </div>
+  <div class="chrome-bot"><span class="l">// live demo — handler · validator · pool · join</span><span class="r">PG 14–18</span></div>
+</section>
+
+<!-- ============== SLIDE 32 · TAKEAWAYS ============== -->
+<section class="slide" id="s32">
+  <div class="chrome-top"><span class="l">closing.takeaways</span><span class="r page-no"></span></div>
+  <div class="slide-content">
+    <div class="slide-header reveal"><span class="num">// END</span><h2>四個結語要點</h2></div>
+    <div class="grid-2 reveal" style="gap:0.7rem">
+      <div class="card accent-cyan">
+        <h3>① <span class="cyan">PG 的可擴充性 = 函式指標</span></h3>
+        <p>從 <span class="inline-code">planner_hook</span>、<span class="inline-code">Executor*_hook</span> 到每個 PlanState 上的 <span class="inline-code">ExecProcNode</span>, 整個 backend 是一張函式指標表。看懂這件事,後面所有 hook、Custom Scan、FDW 都是同一個 pattern。</p>
+      </div>
+      <div class="card accent-magenta">
+        <h3>② <span class="magenta">pgrx = 開發工具鏈,不只是 binding</span></h3>
+        <p>它真正的價值在於把 C extension 的六個痛點(memory / longjmp / ABI / 環境 / Makefile / 樣板)一次處理掉, build / test / multi-version 全收進 <span class="inline-code">cargo pgrx</span>。<span class="inline-code">#[pg_extern]</span> 同時搞定 SQL、型別、NULL、測試。</p>
+      </div>
+      <div class="card accent-amber">
+        <h3>③ <span class="amber">兩個記憶體模型靠橋接共存</span></h3>
+        <p>PG 用 MemoryContext 批次釋放、Rust 用 Drop 個別釋放。<span class="inline-code">PgBox&lt;T, A&gt;</span> 在編譯期表達所有權,<span class="inline-code">leak_and_drop_on_delete</span> 在執行期把 Drop 嵌進 context callback,<span class="inline-code">#[pg_guard]</span> 在 FFI 邊界翻譯 longjmp ↔ panic, 三件套讓兩種模型可以一起跑。</p>
+      </div>
+      <div class="card accent-cyan">
+        <h3>④ <span class="cyan">FDW = 結構化的 hook</span></h3>
+        <p>普通 hook 給你一個指標自己發揮;FDW 給你一張 FdwRoutine vtable,實作 callback 後 PG 接管 plan / execute / DML。<strong>redis_fdw_rs</strong> 就是把 §1–§5 的能力整合成一個能裝進 production 的 extension(pool、TLS、cluster、pushdown、JOIN、batch insert 都用 pgrx 寫得出來)。</p>
+      </div>
+    </div>
+    <div class="card accent-amber reveal" style="margin-top:0.6rem">
+      <h3>Safety ≠ ignorance, 開始用 pgrx 之前先想清楚</h3>
+      <p>pgrx 處理掉 Rust 那一半的雷,但 <strong>MemoryContext 怎麼選、longjmp 何時觸發、ExecutorState 何時消失</strong> 還是要你懂。<br>
+        <strong>適合</strong>:有 Rust 經驗 + 想做 production extension 或想學 PG 內部, 投資收益率最高,錯誤訊息也比 C 友善。<br>
+        <strong>不適合</strong>:沒 Rust 經驗 + 只寫一個小 UDF;或要追 PG master / 特定 minor version。</p>
+    </div>
+    
+  </div>
+  <div class="chrome-bot"><span class="l">// 4 takeaways, 1 invitation</span><span class="r">try cargo pgrx new yours</span></div>
+</section>
+
+<!-- ============== SLIDE 33 · Q&A ============== -->
+<section class="slide cover" id="s33">
+  <div class="chrome-top"><span class="l">closing.qa</span><span class="r page-no"></span></div>
+  <div class="slide-content">
+    <span class="tag reveal">Q & A</span>
+    <h1 class="reveal">Questions?<span class="line2">歡迎提問</span></h1>
+    <p class="subtitle reveal">關於 PostgreSQL extension、Rust、pgrx、redis_fdw_rs, 任何角度都歡迎。</p>
+    <div class="byline reveal">
+      <span><strong>REPO</strong>github.com/isdaniel/redis_fdw_rs</span>
+      <span><strong>pgrx</strong>github.com/pgcentralfoundation/pgrx</span>
+      
+    </div>
+    <div class="byline reveal" style="margin-top:0.5rem">
+      <span><strong>NAVIGATE</strong><span class="kbd">←</span> <span class="kbd">→</span> · <span class="kbd">Space</span> · <span class="kbd">Home</span> / <span class="kbd">End</span></span>
+    </div>
+  </div>
+  <div class="chrome-bot"><span class="l">// end of deck</span><span class="r">▌</span></div>
+</section>
+
+<!-- ============== CONTROLLER SCRIPT ============== -->
+<script>
+/* Mermaid init — match Neon Cyber theme (dark) */
+if (window.mermaid) {
+  mermaid.initialize({
+    startOnLoad: true,
+    theme: 'dark',
+    themeVariables: {
+      darkMode: true,
+      background: '#0a0f1c',
+      fontFamily: 'Satoshi, "Noto Sans TC", sans-serif',
+      fontSize: '14px',
+      primaryColor: '#1a2342',
+      primaryTextColor: '#e6f7ff',
+      primaryBorderColor: '#00ffcc',
+      secondaryColor: '#111827',
+      secondaryTextColor: '#e6f7ff',
+      tertiaryColor: '#1a2342',
+      tertiaryTextColor: '#e6f7ff',
+      lineColor: '#5b8cff',
+      textColor: '#e6f7ff',
+      mainBkg: '#1a2342',
+      nodeTextColor: '#e6f7ff',
+      clusterBkg: 'rgba(17,24,39,0.6)',
+      clusterBorder: '#00ffcc',
+      titleColor: '#00ffcc',
+      edgeLabelBackground: '#0a0f1c'
+    },
+    flowchart: { useMaxWidth: true, htmlLabels: true, nodeSpacing: 30, rankSpacing: 32 }
+  });
+}
+/* Force-color any leftover black SVG text after Mermaid renders */
+window.addEventListener('load', () => {
+  setTimeout(() => {
+    document.querySelectorAll('.mermaid svg text, .mermaid svg tspan').forEach(t => {
+      const f = (t.getAttribute('fill') || '').toLowerCase();
+      if (!f || f === '#000' || f === '#000000' || f === 'black' || f === 'rgb(0, 0, 0)') {
+        t.setAttribute('fill', '#e6f7ff');
+      }
+    });
+    document.querySelectorAll('.mermaid svg .cluster-label, .mermaid svg .nodeLabel').forEach(el => {
+      el.style.color = '#e6f7ff';
+    });
+  }, 600);
+});
+</script>
+<script>
+/* ===========================================
+   SLIDE PRESENTATION CONTROLLER
+   - Intersection Observer for animation triggers
+   - Keyboard navigation (arrows, space, Home/End, PageUp/Down)
+   - Touch swipe support
+   - Progress bar
+   - Nav dots
+   =========================================== */
+class SlidePresentation {
+  constructor() {
+    this.slides = Array.from(document.querySelectorAll('.slide'));
+    this.progress = document.getElementById('progress');
+    this.navDotsContainer = document.getElementById('navDots');
+    this.gotoOverlay = document.getElementById('gotoOverlay');
+    this.gotoInput = document.getElementById('gotoInput');
+    this.gotoTotal = document.getElementById('gotoTotal');
+    this.current = 0;
+    this.setupPageNumbers();
+    this.setupObserver();
+    this.setupNavDots();
+    this.setupKeyboard();
+    this.setupTouch();
+    this.setupScroll();
+    this.setupGoto();
+    if (this.slides[0]) this.slides[0].classList.add('visible');
+    this.updateProgress();
+  }
+
+  /* ---- Page numbers: fill every .page-no with "NN / TT" and make clickable ---- */
+  setupPageNumbers() {
+    const total = this.slides.length;
+    const pad = (n) => String(n).padStart(2, '0');
+    this.slides.forEach((slide, i) => {
+      const span = slide.querySelector('.page-no');
+      if (!span) return;
+      span.textContent = `${pad(i + 1)} / ${pad(total)}`;
+      span.setAttribute('role', 'button');
+      span.setAttribute('tabindex', '0');
+      span.setAttribute('title', 'Click or press G to jump');
+      span.style.cursor = 'pointer';
+      span.style.pointerEvents = 'auto';
+      span.addEventListener('click', () => this.openGoto());
+    });
+    if (this.gotoTotal) this.gotoTotal.textContent = `/ ${pad(total)}`;
+    if (this.gotoInput) this.gotoInput.max = total;
+  }
+
+  setupObserver() {
+    const observer = new IntersectionObserver((entries) => {
+      entries.forEach(entry => {
+        if (entry.isIntersecting && entry.intersectionRatio > 0.4) {
+          entry.target.classList.add('visible');
+          this.current = this.slides.indexOf(entry.target);
+          this.updateActiveDot();
+        }
+      });
+    }, { threshold: [0, 0.4, 0.8] });
+    this.slides.forEach(s => observer.observe(s));
+  }
+
+  setupNavDots() {
+    this.navDotsContainer.innerHTML = '';
+    this.slides.forEach((_, i) => {
+      const dot = document.createElement('button');
+      dot.className = 'nav-dot';
+      dot.setAttribute('aria-label', `Go to slide ${i + 1}`);
+      dot.addEventListener('click', () => this.goTo(i));
+      this.navDotsContainer.appendChild(dot);
+    });
+    this.updateActiveDot();
+  }
+
+  updateActiveDot() {
+    const dots = this.navDotsContainer.querySelectorAll('.nav-dot');
+    dots.forEach((d, i) => d.classList.toggle('active', i === this.current));
+  }
+
+  setupKeyboard() {
+    document.addEventListener('keydown', (e) => {
+      if (this.gotoOverlay && this.gotoOverlay.classList.contains('open')) return; // handled separately
+      switch (e.key) {
+        case 'ArrowRight': case 'ArrowDown': case ' ': case 'PageDown':
+          e.preventDefault(); this.goTo(this.current + 1); break;
+        case 'ArrowLeft': case 'ArrowUp': case 'PageUp':
+          e.preventDefault(); this.goTo(this.current - 1); break;
+        case 'Home': e.preventDefault(); this.goTo(0); break;
+        case 'End':  e.preventDefault(); this.goTo(this.slides.length - 1); break;
+        case 'g': case 'G':
+          e.preventDefault(); this.openGoto(); break;
+      }
+    });
+  }
+
+  setupTouch() {
+    let startY = 0;
+    document.addEventListener('touchstart', (e) => { startY = e.touches[0].clientY; }, { passive: true });
+    document.addEventListener('touchend', (e) => {
+      const dy = startY - e.changedTouches[0].clientY;
+      if (Math.abs(dy) < 60) return;
+      this.goTo(this.current + (dy > 0 ? 1 : -1));
+    }, { passive: true });
+  }
+
+  setupScroll() {
+    window.addEventListener('scroll', () => this.updateProgress(), { passive: true });
+  }
+
+  /* ---- Goto overlay: type a slide number, Enter to jump ---- */
+  setupGoto() {
+    if (!this.gotoOverlay || !this.gotoInput) return;
+    const close = () => { this.gotoOverlay.classList.remove('open'); this.gotoInput.value = ''; };
+    this.gotoInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        const n = parseInt(this.gotoInput.value, 10);
+        if (!isNaN(n)) this.goTo(n - 1);
+        close();
+      } else if (e.key === 'Escape') {
+        e.preventDefault(); close();
+      }
+    });
+    this.gotoOverlay.addEventListener('click', (e) => {
+      if (e.target === this.gotoOverlay) close();
+    });
+    const cancel = this.gotoOverlay.querySelector('[data-action="cancel"]');
+    if (cancel) cancel.addEventListener('click', close);
+  }
+
+  openGoto() {
+    if (!this.gotoOverlay) return;
+    this.gotoOverlay.classList.add('open');
+    this.gotoInput.value = '';
+    setTimeout(() => this.gotoInput.focus(), 30);
+  }
+
+  goTo(i) {
+    i = Math.max(0, Math.min(this.slides.length - 1, i));
+    this.slides[i].scrollIntoView({ behavior: 'smooth' });
+    this.current = i;
+    this.updateActiveDot();
+  }
+
+  updateProgress() {
+    const max = document.documentElement.scrollHeight - window.innerHeight;
+    const pct = max > 0 ? (window.scrollY / max) * 100 : 0;
+    this.progress.style.width = pct + '%';
+  }
+}
+
+new SlidePresentation();
+</script>
+</body>
+</html>

@@ -5,8 +5,8 @@
     Id: int,
     QueryTime: real,
     LockTime: real,
-    RowsSent: int,
-    RowsExamined: int,
+    RowsSent: long,
+    RowsExamined: long,
     Query: string
 )
 
