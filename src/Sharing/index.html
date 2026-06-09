@@ -534,7 +534,6 @@ hr.divider { border: none; border-top: 1px solid var(--rule); margin: 0.7rem 0; 
         </ul>
       </div>
     </div>
-    <div class="takeaway reveal">五個階段裡 Parser / Analyzer / Rewriter 屬於核心不開放,Planner 與 Executor 才有 hook;下一張把整個 exec_simple_query 的 13 個呼叫攤開看,hook 點都掛在這條呼叫鏈上。</div>
   </div>
   <div class="chrome-bot"><span class="l">// from text to tuples</span><span class="r">five stages, two hookable</span></div>
 </section>
@@ -800,45 +799,11 @@ SELECT now(), random()*1e8+1, random(), ...;</div>
   <div class="chrome-bot"><span class="l">// ExecInitNode switch · ExecSetExecProcNode</span><span class="r">function pointer dispatch</span></div>
 </section>
 
-<!-- ============== SLIDE 07c3 · ExecutePlan for-loop ============== -->
-<section class="slide" id="s07c3">
-  <div class="chrome-top"><span class="l">stage.executor-run.executeplan</span><span class="r page-no"></span></div>
-  <div class="slide-content">
-    <div class="slide-header reveal"><span class="num">// 1.5.4</span><h2><span class="accent">ExecutePlan</span> 的 for(;;) 主迴圈</h2></div>
-    <div class="reveal" style="display:grid; grid-template-columns: 1.35fr 1fr; gap:1rem; align-items:stretch; flex:1; min-height:0">
-      <div style="display:flex; align-items:center; justify-content:center; background:#0d0d0d; border:1px solid var(--rule-strong); border-radius:10px; padding:0.5rem; min-height:0; overflow:hidden">
-        <img src="assets/executeplan-loop.png" alt="ExecutePlan for-loop: ResetPerTupleExprContext, ExecProcNode, TupIsNull break, junk filter" style="width:100%; height:auto; max-height:74vh; object-fit:contain; border-radius:6px;">
-      </div>
-      <div class="flex-col" style="gap:0.55rem">
-        <div class="card accent-cyan" style="padding:0.65rem 0.95rem">
-          <h3 style="margin-bottom:0.25rem; font-size:0.98em">迴圈四步</h3>
-          <ol class="steps" style="font-size:0.86em">
-            <li><span class="inline-code">ResetPerTupleExprContext(estate)</span>:釋放上一輪 expression 暫存</li>
-            <li><span class="inline-code">slot = ExecProcNode(planstate)</span>:從根節點拉下一筆 tuple</li>
-            <li><span class="inline-code">if (TupIsNull(slot)) break</span>:沒有 tuple 就結束</li>
-            <li>有 junk filter, 投影出乾淨 tuple 給 client</li>
-          </ol>
-        </div>
-        <div class="card accent-magenta" style="padding:0.65rem 0.95rem">
-          <h3 style="margin-bottom:0.25rem; font-size:0.98em">PerTupleMemoryContext 的角色</h3>
-          <p style="font-size:0.86em">每圈先 reset 一次 per-tuple memory context,expression evaluation 期間 palloc 出來的暫存自動清掉,不需逐筆 pfree, 跟前面 MemoryContext 章節的設計呼應。</p>
-        </div>
-        <div class="card accent-amber" style="padding:0.65rem 0.95rem">
-          <h3 style="margin-bottom:0.25rem; font-size:0.98em">ExecutorRun 的本體</h3>
-          <p style="font-size:0.86em">ExecutorRun 不直接走 plan tree, 它只反覆呼 ExecProcNode,讓 plan tree 自己以 pull-based 方式從根遞迴到葉子,每次取一筆 tuple。</p>
-        </div>
-      </div>
-    </div>
-    <div class="takeaway reveal">ExecutorRun 的本體只有兩件事:每圈 reset per-tuple context、然後呼根節點的 ExecProcNode;其他複雜度都封裝在 PlanState 的函式指標裡。</div>
-  </div>
-  <div class="chrome-bot"><span class="l">// for(;;) · reset · ExecProcNode · TupIsNull</span><span class="r">tuple-by-tuple loop</span></div>
-</section>
-
 <!-- ============== SLIDE 07c · ExecutorRun ============== -->
 <section class="slide" id="s07c">
   <div class="chrome-top"><span class="l">stage.executor-run</span><span class="r page-no"></span></div>
   <div class="slide-content">
-    <div class="slide-header reveal"><span class="num">// 1.5.5</span><h2><span class="accent">ExecutorRun</span> — Volcano model 拉 tuple</h2></div>
+    <div class="slide-header reveal"><span class="num">// 1.5.4</span><h2><span class="accent">ExecutorRun</span> — Volcano model 拉 tuple</h2></div>
     <div class="reveal" style="display:grid; grid-template-columns: 1.55fr 1fr; gap:1rem; align-items:stretch; flex:1; min-height:0">
       <div style="display:flex; align-items:center; justify-content:center; background:linear-gradient(180deg,#0a0f1c,#060b18); border:1px solid var(--rule-strong); border-radius:12px; padding:0.5rem; min-height:0; overflow:hidden">
         <img src="assets/executor-volcano-workflow.png" alt="ExecutorRun volcano model: Project → Unique → Sort → Nestloop Join → Index Scan(s), GetNext 下行 / Tuple 上行" style="width:auto; height:auto; max-width:100%; max-height:72vh; object-fit:contain;">
@@ -858,9 +823,43 @@ SELECT now(), random()*1e8+1, random(), ...;</div>
         </div>
       </div>
     </div>
-    <div class="takeaway reveal">把前幾張串起來:ExecutePlan 的 for-loop 反覆呼 ExecProcNode,plan tree 從根往葉 pull 一筆 tuple、再層層 return 回 client, 這就是 volcano model。下一張看 query 結束時 ExecutorEnd 怎麼把這棵 state tree 拆掉。</div>
+    <div class="takeaway reveal">ExecutorRun 是 volcano model:每個 PlanState 透過 ExecProcNode 向下層拉 tuple,從根到葉一層層 GetNext, 下一張放大 ExecutePlan 的 for-loop,看每圈真正做了什麼。</div>
   </div>
   <div class="chrome-bot"><span class="l">// for(;;) ExecProcNode</span><span class="r">volcano: pull next tuple</span></div>
+</section>
+
+<!-- ============== SLIDE 07c3 · ExecutePlan for-loop ============== -->
+<section class="slide" id="s07c3">
+  <div class="chrome-top"><span class="l">stage.executor-run.executeplan</span><span class="r page-no"></span></div>
+  <div class="slide-content">
+    <div class="slide-header reveal"><span class="num">// 1.5.5</span><h2><span class="accent">ExecutePlan</span> 的 for(;;) 主迴圈</h2></div>
+    <div class="reveal" style="display:grid; grid-template-columns: 1.35fr 1fr; gap:1rem; align-items:stretch; flex:1; min-height:0">
+      <div style="display:flex; align-items:center; justify-content:center; background:#0d0d0d; border:1px solid var(--rule-strong); border-radius:10px; padding:0.5rem; min-height:0; overflow:hidden">
+        <img src="assets/executeplan-loop.png" alt="ExecutePlan for-loop: ResetPerTupleExprContext, ExecProcNode, TupIsNull break, junk filter" style="width:100%; height:auto; max-height:74vh; object-fit:contain; border-radius:6px;">
+      </div>
+      <div class="flex-col" style="gap:0.55rem">
+        <div class="card accent-cyan" style="padding:0.65rem 0.95rem">
+          <h3 style="margin-bottom:0.25rem; font-size:0.98em">迴圈四步</h3>
+          <ol class="steps" style="font-size:0.86em">
+            <li><span class="inline-code">ResetPerTupleExprContext(estate)</span>:釋放上一輪 expression 暫存</li>
+            <li><span class="inline-code">slot = ExecProcNode(planstate)</span>:從根節點拉下一筆 tuple</li>
+            <li><span class="inline-code">if (TupIsNull(slot)) break</span>:沒有 tuple 就結束</li>
+            <li>有 junk filter, 投影出乾淨 tuple 給 client</li>
+          </ol>
+        </div>
+        <div class="card accent-magenta" style="padding:0.65rem 0.95rem">
+          <h3 style="margin-bottom:0.25rem; font-size:0.98em">PerTupleMemoryContext 的角色</h3>
+          <p style="font-size:0.86em">每圈先 reset 一次 per-tuple memory context,expression evaluation 期間 palloc 出來的暫存自動清掉,不需逐筆 pfree, 後面 MemoryContext 章節會展開這個設計。</p>
+        </div>
+        <div class="card accent-amber" style="padding:0.65rem 0.95rem">
+          <h3 style="margin-bottom:0.25rem; font-size:0.98em">ExecutorRun 的本體</h3>
+          <p style="font-size:0.86em">ExecutorRun 不直接走 plan tree, 它只反覆呼 ExecProcNode,讓 plan tree 自己以 pull-based 方式從根遞迴到葉子,每次取一筆 tuple。</p>
+        </div>
+      </div>
+    </div>
+    <div class="takeaway reveal">ExecutePlan 的 for-loop 只做兩件事:每圈 reset per-tuple context、然後呼根節點的 ExecProcNode;其他複雜度都封裝在 PlanState 的函式指標裡。下一張看 query 結束時 ExecutorEnd 怎麼把這棵 state tree 拆掉。</div>
+  </div>
+  <div class="chrome-bot"><span class="l">// for(;;) · reset · ExecProcNode · TupIsNull</span><span class="r">tuple-by-tuple loop</span></div>
 </section>
 
 <!-- ============== SLIDE 07d · ExecutorEnd ============== -->
@@ -1066,7 +1065,6 @@ relocatable = <span class="kw">true</span></div>
       <div class="card accent-cyan"><h3>背景任務</h3><ul class="bullet"><li>Background Worker</li><li>常駐進程</li><li>定時排程</li><li>例: pg_cron, autovacuum</li></ul></div>
       <div class="card accent-magenta"><h3>儲存層</h3><ul class="bullet"><li>Table Access Method</li><li>Foreign Data Wrapper</li><li>Custom Scan Provider</li><li>例: zheap, citus</li></ul></div>
       <div class="card accent-magenta"><h3>索引層</h3><ul class="bullet"><li>Index Access Method</li><li>(B-tree / GIN / GiST / SP-GiST / BRIN)</li><li>自訂索引型別</li><li>例: pgvector (HNSW)</li></ul></div>
-      <div class="card accent-magenta"><h3>程序語言</h3><ul class="bullet"><li>PL Handler</li><li>PL/Rust · PL/v8 · PL/Python</li><li>讓 SQL 能呼叫該語言函式</li></ul></div>
     </div>
     <div class="takeaway reveal">extension 的擴充面很廣,從函式到儲存層、索引層都能介入;接下來看用什麼工具能把這六類擴充面都做到。</div>
   </div>
@@ -1081,7 +1079,7 @@ relocatable = <span class="kw">true</span></div>
     <h2 class="sec-title reveal">pgrx — 用 <span class="accent">Rust</span><br>寫 PostgreSQL extension 的框架</h2>
     <p class="sec-desc reveal">不只是「Rust binding」它是一整套包含 build、test、type mapping、SQL 自動產生的開發環境。</p>
   </div>
-  <div class="chrome-bot"><span class="l">github.com/pgcentralfoundation/pgrx</span><span class="r">postgres 13 → 17 supported</span></div>
+  <div class="chrome-bot"><span class="l">github.com/pgcentralfoundation/pgrx</span><span class="r">postgres 14 → 18 supported</span></div>
 </section>
 
 
@@ -1090,45 +1088,35 @@ relocatable = <span class="kw">true</span></div>
   <div class="chrome-top"><span class="l">pgrx.why-not-c</span><span class="r page-no"></span></div>
   <div class="slide-content">
     <div class="slide-header reveal"><span class="num">// 3.1</span><h2>為什麼需要 pgrx? — <span class="accent">C extension 的痛點</span></h2></div>
-    <p class="reveal" style="font-size:1.05em; color:var(--text-dim); margin-bottom:0.9rem; line-height:1.6">用 C 寫 PostgreSQL extension 的痛分兩類:<strong class="cyan">PG backend 帶來的</strong>(memory / longjmp / ABI),以及 <strong class="cyan">C 語言本身的</strong>(工具鏈 / 寫法 / 缺乏型別安全)。</p>
+    <p class="reveal" style="font-size:1.05em; color:var(--text-dim); margin-bottom:0.9rem; line-height:1.6">用 C 寫 PostgreSQL extension 的痛分兩類:<strong class="cyan">PG backend 帶來的</strong>(ABI),以及 <strong class="cyan">C 語言本身的</strong>(工具鏈 / 寫法 / 缺乏型別安全)。</p>
 
     <div class="grid-3 reveal" style="gap:1rem">
       <div class="card accent-magenta" style="padding:0.95rem 1.2rem">
-        <h3 style="margin-bottom:0.4rem; font-size:1.1em">Pain 01 · 記憶體</h3>
-        <p style="font-size:0.95em; line-height:1.55"><span class="inline-code">palloc / pfree</span> 綁在 MemoryContext,context 結束才整批釋放;raw pointer / cstring 一不小心就 segfault。</p>
-        <p style="font-size:0.85em; color:var(--text-mute); margin-top:0.55rem">leak · use-after-free · double-free 全靠 reviewer</p>
-      </div>
-      <div class="card accent-magenta" style="padding:0.95rem 1.2rem">
-        <h3 style="margin-bottom:0.4rem; font-size:1.1em">Pain 02 · longjmp 跳過清理</h3>
-        <p style="font-size:0.95em; line-height:1.55"><span class="inline-code">ereport(ERROR)</span> 透過 longjmp 跳回最近的 <span class="inline-code">PG_TRY/PG_CATCH</span>,跟 C++ destructor、Rust Drop 完全不相容。</p>
-        <p style="font-size:0.85em; color:var(--text-mute); margin-top:0.55rem">stack 上的資源沒人清理</p>
-      </div>
-      <div class="card accent-magenta" style="padding:0.95rem 1.2rem">
-        <h3 style="margin-bottom:0.4rem; font-size:1.1em">Pain 03 · ABI 變動</h3>
+        <h3 style="margin-bottom:0.4rem; font-size:1.1em">Pain 01 · ABI 變動</h3>
         <p style="font-size:0.95em; line-height:1.55">PG 每個 major version 動 ABI,同一份 <span class="inline-code">.so</span> 不能跨版本;internal API 沒 stability guarantee。</p>
         <p style="font-size:0.85em; color:var(--text-mute); margin-top:0.55rem">多版本支援 = #ifdef 地獄</p>
       </div>
 
       <div class="card accent-amber" style="padding:0.95rem 1.2rem">
-        <h3 style="margin-bottom:0.4rem; font-size:1.1em">Pain 04 · 環境 &amp; 工具鏈</h3>
+        <h3 style="margin-bottom:0.4rem; font-size:1.1em">Pain 02 · 環境 &amp; 工具鏈</h3>
         <p style="font-size:0.95em; line-height:1.55">先要 <span class="inline-code">pg_config</span> 找到 headers / lib,還要對應的 <span class="inline-code">postgresql-server-dev</span> 套件,各 distro 路徑不一;CI 上每個 PG 版本都要重新裝一次。</p>
         <p style="font-size:0.85em; color:var(--text-mute); margin-top:0.55rem">Linux · macOS · Windows 各自踩雷</p>
       </div>
       <div class="card accent-amber" style="padding:0.95rem 1.2rem">
-        <h3 style="margin-bottom:0.4rem; font-size:1.1em">Pain 05 · Makefile / PGXS</h3>
+        <h3 style="margin-bottom:0.4rem; font-size:1.1em">Pain 03 · Makefile / PGXS</h3>
         <p style="font-size:0.95em; line-height:1.55">PGXS 約定俗成的目錄結構 + control 檔 + sql 檔 + 版本升級 script,新手不熟就卡關;build / install / test / clean 步驟分散多處。</p>
         <p style="font-size:0.85em; color:var(--text-mute); margin-top:0.55rem">Makefile 是隱性的學習成本</p>
       </div>
       <div class="card accent-amber" style="padding:0.95rem 1.2rem">
-        <h3 style="margin-bottom:0.4rem; font-size:1.1em">Pain 06 · 樣板 &amp; 缺型別安全</h3>
+        <h3 style="margin-bottom:0.4rem; font-size:1.1em">Pain 04 · 樣板 &amp; 缺型別安全</h3>
         <p style="font-size:0.95em; line-height:1.55">每個 UDF 都要寫 <span class="inline-code">PG_FUNCTION_INFO_V1</span> + <span class="inline-code">PG_GETARG_*</span> + <span class="inline-code">PG_RETURN_*</span>;泛型靠 macro,生命週期、null 處理、字串編碼全靠人工。</p>
         <p style="font-size:0.85em; color:var(--text-mute); margin-top:0.55rem">沒套件管理、沒 lint、沒 fmt</p>
       </div>
     </div>
 
-    <div class="takeaway reveal">寫 PG extension 的成本不只是 C 語法,還包含工具鏈、Makefile、ABI、記憶體模型;下一張看一個專門來解這六個痛點的框架, pgrx 到底是什麼。</div>
+    <div class="takeaway reveal">寫 PG extension 的成本不只是 C 語法,還包含工具鏈、Makefile、ABI;下一張看一個專門來解這四個痛點的框架, pgrx 到底是什麼。</div>
   </div>
-  <div class="chrome-bot"><span class="l">// 6 pains · PG-specific + C-generic</span><span class="r">pgrx solves all six</span></div>
+  <div class="chrome-bot"><span class="l">// 4 pains · PG-specific + C-generic</span><span class="r">pgrx solves all four</span></div>
 </section>
 
 <!-- ============== SLIDE 14 · What is pgrx ============== -->
@@ -1165,7 +1153,7 @@ relocatable = <span class="kw">true</span></div>
       </div>
     </div>
 
-    <div class="takeaway reveal">pgrx 是 PG Community Foundation 維護的官方級框架,真實 production extension 都用它;接下來看它怎麼把上一張那六個痛點一次處理掉, 從 ABI / FFI 開始。</div>
+    <div class="takeaway reveal">pgrx 是 PG Community Foundation 維護的官方級框架,真實 production extension 都用它;接下來看它怎麼把上一張那四個痛點一次處理掉, 從 ABI / FFI 開始。</div>
     </div>
   <div class="chrome-bot"><span class="l">// not just bindings — a full toolchain</span><span class="r">PGCF maintained</span></div>
 </section>
@@ -1253,7 +1241,7 @@ flowchart TD
       </div>
       <div class="card" style="padding:0.5rem 0.75rem; border-left:3px solid #c8a8ff">
         <h3 style="margin-bottom:0.1rem; font-size:0.85em">cargo-pgrx</h3>
-        <p style="font-size:0.78em">同份原始碼以 features 編 PG 13–18 多版本</p>
+        <p style="font-size:0.78em">同份原始碼以 features 編 PG 14–18 多版本</p>
       </div>
     </div>
 
@@ -1378,7 +1366,7 @@ flowchart TD
     <div class="grid-2 reveal" style="align-items:start">
       <ol class="steps">
         <li><strong>安裝 pgrx</strong>, <span class="mono">cargo install --locked cargo-pgrx</span></li>
-        <li><strong>初始化環境</strong>, <span class="mono">cargo pgrx init</span>;會自動下載並編譯 PG 13–17 到 <span class="inline-code">~/.pgrx</span></li>
+        <li><strong>初始化環境</strong>, <span class="mono">cargo pgrx init</span>;會自動下載並編譯 PG 14–18 到 <span class="inline-code">~/.pgrx</span></li>
         <li><strong>建專案</strong>, <span class="mono">cargo pgrx new my_ext</span></li>
         <li><strong>寫 Rust 程式碼</strong>, 用 <span class="inline-code">#[pg_extern]</span> 等屬性</li>
         <li><strong>跑起來</strong>, <span class="mono">cargo pgrx run pg17</span> 自動啟一個 PG + psql</li>
@@ -1871,7 +1859,7 @@ panic = <span class="str">"unwind"</span></div>
           <li><strong>開發速度 2–3×</strong>: cargo + 自動 SQL + 整合測試</li>
           <li><strong>強型別生態</strong>: serde / tokio (有限) / clap 都能用</li>
           <li><strong>cargo pgrx test</strong>: 在真 PG 裡跑單元測試</li>
-          <li><strong>自動 multi-version build</strong>: 同一份原始碼編 PG 13–17</li>
+          <li><strong>自動 multi-version build</strong>: 同一份原始碼編 PG 14–18</li>
           <li><strong>跨平台</strong>: Linux / macOS 一致工具鏈</li>
         </ul>
       </div>
@@ -1880,7 +1868,6 @@ panic = <span class="str">"unwind"</span></div>
         <ul class="bullet">
           <li><strong>學習曲線陡</strong>: Rust + PG 內部 + pgrx 三層都要懂</li>
           <li><strong>三套 memory model</strong>: C/PG · Rust · pgrx 橋接</li>
-          <li><strong>無法指定 minor version</strong> 或 master branch</li>
           <li><strong>不支援 pg_regress</strong>: SQL-level regression test 要自己搞</li>
           <li><strong>文件較少</strong>: 比起 C extension 累積二十年的資料,還是吃虧</li>
           <li><strong>GIN/GiST/SP-GiST</strong> 無自動 SQL 生成</li>
@@ -1915,7 +1902,7 @@ panic = <span class="str">"unwind"</span></div>
     <div class="grid-2 reveal">
       <div class="card accent-cyan">
         <h3>普通 hook</h3>
-        <p>「我給你一個函式指標,你想做什麼自己處理。」<br>自由 → 但全靠你寫對。</p>
+        <p>「我給你一個函式指標,你想做什麼自己處理。」</p>
       </div>
       <div class="card accent-magenta">
         <h3>FDW</h3>
@@ -2188,11 +2175,11 @@ HGET user:1 email         <span class="com">-- O(1),只回一筆</span></div>
         <div class="card accent-cyan">
           <h3>Demo 想展示的 5 件事</h3>
           <ol class="steps">
-            <li><strong>HANDLER + VALIDATOR</strong>, 完整 FDW 註冊三件套</li>
-            <li><strong>Pool options</strong>, server 階就決定連線池大小</li>
             <li><strong>WHERE pushdown</strong>, EXPLAIN 看到 HGET 不是 HGETALL</li>
             <li><strong>TTL 自動過期</strong>, 表級 + per-row 兩種寫法</li>
             <li><strong>Multi-key + JOIN pushdown</strong>, 同 server 兩表 hash join</li>
+            <li><strong>UPDATE / DELETE</strong>, FDW write operations</li>
+            <li><strong>TRUNCATE</strong>, 一次清空 FDW data</li>
           </ol>
         </div>
         <div class="card accent-magenta">
@@ -2206,7 +2193,7 @@ HGET user:1 email         <span class="com">-- O(1),只回一筆</span></div>
         <div class="card accent-amber" style="padding:0.65rem 0.9rem">
           <h3 style="margin-bottom:0.2rem">Try it</h3>
           <p class="mono" style="font-size:0.85em;color:var(--text)">github.com/isdaniel/redis_fdw_rs</p>
-          <p style="font-size:0.83em;margin-top:0.2rem">apt repo 有 PG 14–18 的 prebuilt deb,Ubuntu 22/24 + Debian 11/12 amd64。</p>
+          <p style="font-size:0.83em;margin-top:0.2rem">apt repo 有 PG 14–18 的 prebuilt deb,Ubuntu 22/24。</p>
         </div>
       </div>
     </div>
@@ -2227,7 +2214,7 @@ HGET user:1 email         <span class="com">-- O(1),只回一筆</span></div>
       </div>
       <div class="card accent-magenta">
         <h3>② <span class="magenta">pgrx = 開發工具鏈,不只是 binding</span></h3>
-        <p>它真正的價值在於把 C extension 的六個痛點(memory / longjmp / ABI / 環境 / Makefile / 樣板)一次處理掉, build / test / multi-version 全收進 <span class="inline-code">cargo pgrx</span>。<span class="inline-code">#[pg_extern]</span> 同時搞定 SQL、型別、NULL、測試。</p>
+        <p>它真正的價值在於把 C extension 的四個痛點(ABI / 環境 / Makefile / 樣板)一次處理掉, build / test / multi-version 全收進 <span class="inline-code">cargo pgrx</span>。<span class="inline-code">#[pg_extern]</span> 同時搞定 SQL、型別、NULL、測試。</p>
       </div>
       <div class="card accent-amber">
         <h3>③ <span class="amber">兩個記憶體模型靠橋接共存</span></h3>
@@ -2255,7 +2242,6 @@ HGET user:1 email         <span class="com">-- O(1),只回一筆</span></div>
   <div class="slide-content">
     <span class="tag reveal">Q & A</span>
     <h1 class="reveal">Questions?<span class="line2">歡迎提問</span></h1>
-    <p class="subtitle reveal">關於 PostgreSQL extension、Rust、pgrx、redis_fdw_rs, 任何角度都歡迎。</p>
     <div class="byline reveal">
       <span><strong>REPO</strong>github.com/isdaniel/redis_fdw_rs</span>
       <span><strong>pgrx</strong>github.com/pgcentralfoundation/pgrx</span>
