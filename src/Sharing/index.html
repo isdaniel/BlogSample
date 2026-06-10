@@ -684,237 +684,6 @@ SELECT now(), random()*1e8+1, random(), ...;</div>
   <div class="chrome-bot"><span class="l">// init → run → finish → end</span><span class="r">每個都是 function pointer</span></div>
 </section>
 
-<!-- ============== SLIDE 07b · ExecutorStart 細節 ============== -->
-<section class="slide" id="s07b">
-  <div class="chrome-top"><span class="l">stage.executor-start</span><span class="r page-no"></span></div>
-  <div class="slide-content">
-    <div class="slide-header reveal"><span class="num">// 1.5.1</span><h2><span class="accent">ExecutorStart</span> 裡到底做了什麼?</h2></div>
-    <div class="reveal" style="display:grid; grid-template-columns: 1.3fr 1fr; gap: 1rem; align-items:stretch; flex:1; min-height:0">
-      <div style="display:flex; align-items:center; justify-content:center; background:linear-gradient(180deg,#0a0f1c,#060b18); border:1px solid var(--rule-strong); border-radius:12px; padding:0.6rem; min-height:0">
-        <img src="assets/executor-start-flow.png" alt="ExecutorStart 遞迴包裝 plan tree 範例" style="max-width:100%; max-height:64vh; width:auto; object-fit:contain;">
-      </div>
-      <div class="flex-col" style="gap:0.5rem">
-        <div class="card accent-cyan">
-          <h3>兩件事</h3>
-          <ol class="steps">
-            <li><strong>建 EState</strong>, 一次 query 的執行上下文 (snapshot、memory context、parameters、tuple slot)</li>
-            <li><strong>遞迴包裝 Plan tree</strong>, 每個 PlanNode 用 <span class="inline-code">ExecInitNode()</span> 變成對應的 <span class="inline-code">PlanState</span></li>
-          </ol>
-        </div>
-        <div class="card accent-magenta">
-          <h3>左圖讀法</h3>
-          <p style="font-size:0.92em">範例 query <span class="inline-code">SELECT * FROM t1 WHERE id&lt;3 ORDER BY id LIMIT 2</span> 的 plan tree 是「Limit → IndexScan」。<strong>ExecutorStart 從上往下遞迴</strong>,每個節點都呼一次 <span class="inline-code">ExecInitNode</span>,分派到對應的 <span class="inline-code">ExecInitLimit</span> / <span class="inline-code">ExecInitIndexScan</span>。EXPLAIN 的縮排深度 = 這個遞迴深度。</p>
-        </div>
-        <div class="card accent-amber">
-          <h3>PlanNode → ExecInit* 對照</h3>
-          <table style="margin-top:0.2rem;font-size:0.82em">
-            <thead><tr><th>Plan</th><th>ExecInit*</th></tr></thead>
-            <tbody>
-              <tr><td>Limit</td><td>ExecInitLimit</td></tr>
-              <tr><td>Sort</td><td>ExecInitSort</td></tr>
-              <tr><td>IndexScan</td><td>ExecInitIndexScan</td></tr>
-              <tr><td>SeqScan</td><td>ExecInitSeqScan</td></tr>
-              <tr><td>HashJoin</td><td>ExecInitHashJoin</td></tr>
-              <tr><td>ForeignScan</td><td class="cyan">ExecInitForeignScan ← FDW</td></tr>
-            </tbody>
-          </table>
-        </div>
-      </div>
-    </div>
-    <div class="takeaway reveal">每種 plan node 都有自己的 ExecInit* 與 Exec*;ExecutorStart 在這裡組裝整棵 state tree,讓後續 Run 階段可以一筆一筆拉 tuple。</div>
-  </div>
-  <div class="chrome-bot"><span class="l">// EState + ExecInitNode recursion</span><span class="r">plan tree mirrored to state tree</span></div>
-</section>
-
-<!-- ============== SLIDE 07c2 · PlanState + ExecProcNodeMtd ============== -->
-<section class="slide" id="s07c2">
-  <div class="chrome-top"><span class="l">stage.executor-run.planstate</span><span class="r page-no"></span></div>
-  <div class="slide-content">
-    <div class="slide-header reveal"><span class="num">// 1.5.2</span><h2><span class="accent">PlanState</span> 上的兩個函式指標</h2></div>
-    <div class="reveal" style="display:grid; grid-template-columns: 1.35fr 1fr; gap:1rem; align-items:stretch; flex:1; min-height:0">
-      <div style="display:flex; align-items:center; justify-content:center; background:#0d0d0d; border:1px solid var(--rule-strong); border-radius:10px; padding:0.5rem; min-height:0; overflow:hidden">
-        <img src="assets/planstate-execprocnode.png" alt="PlanState struct: ExecProcNode wrapper + ExecProcNodeReal; ExecProcNodeMtd typedef returns next TupleTableSlot" style="width:100%; height:auto; max-height:74vh; object-fit:contain; border-radius:6px;">
-      </div>
-      <div class="flex-col" style="gap:0.55rem">
-        <div class="card accent-cyan" style="padding:0.65rem 0.95rem">
-          <h3 style="margin-bottom:0.25rem; font-size:0.98em">每個節點兩個函式指標</h3>
-          <ul class="bullet" style="font-size:0.86em">
-            <li><span class="inline-code">ExecProcNode</span>:wrapper, 呼叫 <span class="inline-code">ExecProcNodeReal</span> 拉 tuple,並在前後做計時、累計 rows / loops, 也就是 <strong>EXPLAIN ANALYZE</strong> 看到的數字來源</li>
-            <li><span class="inline-code">ExecProcNodeReal</span>:節點實際取下一筆 tuple 的實作(SeqScan / IndexScan / HashJoin...)</li>
-            <li>沒開 ANALYZE 時 wrapper 會被換成精簡版(<span class="inline-code">ExecProcNodeInstr</span> 或直接 ExecProcNodeReal),不付量測 overhead</li>
-          </ul>
-        </div>
-        <div class="card accent-magenta" style="padding:0.65rem 0.95rem">
-          <h3 style="margin-bottom:0.25rem; font-size:0.98em">ExecProcNodeMtd 簽章</h3>
-          <p style="font-size:0.86em">每個節點實作成 <span class="inline-code">TupleTableSlot *(*)(PlanState *)</span>:回下一筆 tuple,沒有更多時回 NULL 或空 slot, 這是 volcano model 的核心 contract。</p>
-        </div>
-        <div class="card accent-amber" style="padding:0.65rem 0.95rem">
-          <h3 style="margin-bottom:0.25rem; font-size:0.98em">為什麼是兩層?</h3>
-          <p style="font-size:0.86em">Wrapper / Real 拆兩層讓 instrument hook、JIT、parallel worker 等功能可以攔在 wrapper 上,核心節點實作完全不用知道誰在量它,職責分離。</p>
-        </div>
-      </div>
-    </div>
-    <div class="takeaway reveal">這張先看「裝好之後長什麼樣」, PlanState 上有兩個欄位:wrapper 處理 instrumentation,real 處理拉 tuple, 下一張看 ExecutorStart 怎麼把這兩個欄位填進去。</div>
-  </div>
-  <div class="chrome-bot"><span class="l">// PlanState · ExecProcNode wrapper · ExecProcNodeReal</span><span class="r">two function pointers per node</span></div>
-</section>
-
-<!-- ============== SLIDE 07b2 · ExecSetExecProcNode ============== -->
-<section class="slide" id="s07b2">
-  <div class="chrome-top"><span class="l">stage.executor-start.set-procnode</span><span class="r page-no"></span></div>
-  <div class="slide-content">
-    <div class="slide-header reveal"><span class="num">// 1.5.3</span><h2><span class="accent">ExecutorStart</span> 怎麼把 function pointer 設好的?</h2></div>
-    <div class="reveal" style="display:grid; grid-template-columns: 1.45fr 1fr; gap:1rem; align-items:stretch; flex:1; min-height:0">
-      <div style="display:flex; align-items:center; justify-content:center; background:#0d0d0d; border:1px solid var(--rule-strong); border-radius:10px; padding:0.5rem; min-height:0; overflow:hidden">
-        <img src="assets/exec-set-procnode.png" alt="ExecSetExecProcNode 把 ExecProcNodeReal 設成節點實作、ExecProcNode 設成 ExecProcNodeFirst wrapper;ExecInitNode switch 依 NodeTag 分派到 ExecInitCustomScan / ExecInitNestLoop / ExecInitMergeJoin" style="width:100%; height:auto; max-height:74vh; object-fit:contain; border-radius:6px;">
-      </div>
-      <div class="flex-col" style="gap:0.55rem">
-        <div class="card accent-cyan" style="padding:0.65rem 0.95rem">
-          <h3 style="margin-bottom:0.25rem; font-size:0.98em">兩步流程</h3>
-          <ol class="steps" style="font-size:0.86em">
-            <li><span class="inline-code">ExecInitNode</span> 用 switch 看 <span class="inline-code">NodeTag</span>,呼對應的 <span class="inline-code">ExecInit*</span>(SeqScan / NestLoop / MergeJoin / CustomScan, ...)。</li>
-            <li><span class="inline-code">ExecInit*</span> 內部呼 <span class="inline-code">ExecSetExecProcNode</span>,把節點的 next-tuple 函式 <strong>裝到 PlanState 上</strong>。</li>
-          </ol>
-        </div>
-        <div class="card accent-magenta" style="padding:0.65rem 0.95rem">
-          <h3 style="margin-bottom:0.25rem; font-size:0.98em">ExecSetExecProcNode 做什麼</h3>
-          <p style="font-size:0.86em">把使用者傳進來的 <span class="inline-code">function</span>(節點實作)分別存到兩個欄位:</p>
-          <ul class="bullet" style="font-size:0.85em; margin-top:0.3rem">
-            <li><span class="inline-code">node-&gt;ExecProcNodeReal = function</span>, 真正取下一筆 tuple</li>
-            <li><span class="inline-code">node-&gt;ExecProcNode = ExecProcNodeFirst</span>, 第一次呼叫的 wrapper,負責檢查 stack depth、可能加上 instrumentation</li>
-          </ul>
-        </div>
-        <div class="card accent-amber" style="padding:0.65rem 0.95rem">
-          <h3 style="margin-bottom:0.25rem; font-size:0.98em">為什麼第一次特別?</h3>
-          <p style="font-size:0.86em">註解寫得清楚:第一次執行時 wrapper 才需要做 stack-depth 檢查、initialize instrumentation;之後 ExecProcNode 會被換成更簡單的版本(<span class="inline-code">ExecProcNodeInstr</span> 或直接 ExecProcNodeReal),減少每 tuple 的 overhead。</p>
-        </div>
-        <div class="card" style="padding:0.65rem 0.95rem; border-left:3px solid #c8a8ff">
-          <h3 style="margin-bottom:0.25rem; font-size:0.98em">和 hook 的關係</h3>
-          <p style="font-size:0.86em">這就是 <strong>function pointer dispatch</strong> 的範例:plan tree 中每種 node type 對應一個 init 函式,init 內把實際取 tuple 的邏輯掛到 PlanState 上。Custom Scan / FDW 的 hook 機制,就是延續這個 pattern, 自己提供一組 ExecProcNode 實作。</p>
-        </div>
-      </div>
-    </div>
-    <div class="takeaway reveal">ExecutorStart 的核心動作是「對每個節點呼 ExecInit\*,把對應的 next-tuple function 裝進 PlanState」, 之後 ExecutorRun 就只是反覆呼這些 function pointer。</div>
-  </div>
-  <div class="chrome-bot"><span class="l">// ExecInitNode switch · ExecSetExecProcNode</span><span class="r">function pointer dispatch</span></div>
-</section>
-
-<!-- ============== SLIDE 07c · ExecutorRun ============== -->
-<section class="slide" id="s07c">
-  <div class="chrome-top"><span class="l">stage.executor-run</span><span class="r page-no"></span></div>
-  <div class="slide-content">
-    <div class="slide-header reveal"><span class="num">// 1.5.4</span><h2><span class="accent">ExecutorRun</span> — Volcano model 拉 tuple</h2></div>
-    <div class="reveal" style="display:grid; grid-template-columns: 1.55fr 1fr; gap:1rem; align-items:stretch; flex:1; min-height:0">
-      <div style="display:flex; align-items:center; justify-content:center; background:linear-gradient(180deg,#0a0f1c,#060b18); border:1px solid var(--rule-strong); border-radius:12px; padding:0.5rem; min-height:0; overflow:hidden">
-        <img src="assets/executor-volcano-workflow.png" alt="ExecutorRun volcano model: Project → Unique → Sort → Nestloop Join → Index Scan(s), GetNext 下行 / Tuple 上行" style="width:auto; height:auto; max-width:100%; max-height:72vh; object-fit:contain;">
-      </div>
-      <div class="flex-col" style="gap:0.55rem">
-        <div class="card accent-cyan" style="padding:0.65rem 0.95rem">
-          <h3 style="margin-bottom:0.2rem; font-size:0.95em">主迴圈在 ExecutePlan</h3>
-          <p style="font-size:0.85em"><span class="inline-code">for(;;)</span> 反覆呼 <span class="inline-code">ExecProcNode(planstate)</span>;每圈先 <span class="inline-code">ResetPerTupleExprContext</span> 釋放上一輪暫存,拿到 NULL tuple 就結束。</p>
-        </div>
-        <div class="card accent-magenta" style="padding:0.65rem 0.95rem">
-          <h3 style="margin-bottom:0.2rem; font-size:0.95em">Volcano / Pull model</h3>
-          <p style="font-size:0.85em">每個 PlanState 透過 <span class="inline-code">ExecProcNode</span> 向下層拉一筆 tuple。Limit → Sort → SeqScan/IndexScan 一層層 <strong class="cyan">GetNext</strong>,一筆 tuple 從葉子回到根節點。</p>
-        </div>
-        <div class="card accent-amber" style="padding:0.65rem 0.95rem">
-          <h3 style="margin-bottom:0.2rem; font-size:0.95em">PlanState 上的兩個函式指標</h3>
-          <p style="font-size:0.85em"><span class="inline-code">ExecProcNode</span> 是 wrapper(可帶 <span class="inline-code">Instrumentation</span>);<span class="inline-code">ExecProcNodeReal</span> 是該節點實際的 next-tuple 實作。包裝層讓 EXPLAIN ANALYZE 能在不改節點程式碼下測量每節點 cost。</p>
-        </div>
-      </div>
-    </div>
-    <div class="takeaway reveal">ExecutorRun 是 volcano model:每個 PlanState 透過 ExecProcNode 向下層拉 tuple,從根到葉一層層 GetNext, 下一張放大 ExecutePlan 的 for-loop,看每圈真正做了什麼。</div>
-  </div>
-  <div class="chrome-bot"><span class="l">// for(;;) ExecProcNode</span><span class="r">volcano: pull next tuple</span></div>
-</section>
-
-<!-- ============== SLIDE 07c3 · ExecutePlan for-loop ============== -->
-<section class="slide" id="s07c3">
-  <div class="chrome-top"><span class="l">stage.executor-run.executeplan</span><span class="r page-no"></span></div>
-  <div class="slide-content">
-    <div class="slide-header reveal"><span class="num">// 1.5.5</span><h2><span class="accent">ExecutePlan</span> 的 for(;;) 主迴圈</h2></div>
-    <div class="reveal" style="display:grid; grid-template-columns: 1.35fr 1fr; gap:1rem; align-items:stretch; flex:1; min-height:0">
-      <div style="display:flex; align-items:center; justify-content:center; background:#0d0d0d; border:1px solid var(--rule-strong); border-radius:10px; padding:0.5rem; min-height:0; overflow:hidden">
-        <img src="assets/executeplan-loop.png" alt="ExecutePlan for-loop: ResetPerTupleExprContext, ExecProcNode, TupIsNull break, junk filter" style="width:100%; height:auto; max-height:74vh; object-fit:contain; border-radius:6px;">
-      </div>
-      <div class="flex-col" style="gap:0.55rem">
-        <div class="card accent-cyan" style="padding:0.65rem 0.95rem">
-          <h3 style="margin-bottom:0.25rem; font-size:0.98em">迴圈四步</h3>
-          <ol class="steps" style="font-size:0.86em">
-            <li><span class="inline-code">ResetPerTupleExprContext(estate)</span>:釋放上一輪 expression 暫存</li>
-            <li><span class="inline-code">slot = ExecProcNode(planstate)</span>:從根節點拉下一筆 tuple</li>
-            <li><span class="inline-code">if (TupIsNull(slot)) break</span>:沒有 tuple 就結束</li>
-            <li>有 junk filter, 投影出乾淨 tuple 給 client</li>
-          </ol>
-        </div>
-        <div class="card accent-magenta" style="padding:0.65rem 0.95rem">
-          <h3 style="margin-bottom:0.25rem; font-size:0.98em">PerTupleMemoryContext 的角色</h3>
-          <p style="font-size:0.86em">每圈先 reset 一次 per-tuple memory context,expression evaluation 期間 palloc 出來的暫存自動清掉,不需逐筆 pfree, 後面 MemoryContext 章節會展開這個設計。</p>
-        </div>
-        <div class="card accent-amber" style="padding:0.65rem 0.95rem">
-          <h3 style="margin-bottom:0.25rem; font-size:0.98em">ExecutorRun 的本體</h3>
-          <p style="font-size:0.86em">ExecutorRun 不直接走 plan tree, 它只反覆呼 ExecProcNode,讓 plan tree 自己以 pull-based 方式從根遞迴到葉子,每次取一筆 tuple。</p>
-        </div>
-      </div>
-    </div>
-    <div class="takeaway reveal">ExecutePlan 的 for-loop 只做兩件事:每圈 reset per-tuple context、然後呼根節點的 ExecProcNode;其他複雜度都封裝在 PlanState 的函式指標裡。下一張看 query 結束時 ExecutorEnd 怎麼把這棵 state tree 拆掉。</div>
-  </div>
-  <div class="chrome-bot"><span class="l">// for(;;) · reset · ExecProcNode · TupIsNull</span><span class="r">tuple-by-tuple loop</span></div>
-</section>
-
-<!-- ============== SLIDE 07d · ExecutorEnd ============== -->
-<section class="slide" id="s07d">
-  <div class="chrome-top"><span class="l">stage.executor-end</span><span class="r page-no"></span></div>
-  <div class="slide-content">
-    <div class="slide-header reveal"><span class="num">// 1.5.6</span><h2><span class="accent">ExecutorEnd</span> — 反向遞迴釋放資源</h2></div>
-    <div class="reveal" style="display:grid; grid-template-columns: 1.2fr 1fr; gap:1rem; align-items:stretch; flex:1; min-height:0">
-      <div style="display:flex; align-items:center; justify-content:center; background:linear-gradient(180deg,#0a0f1c,#060b18); border:1px solid var(--rule-strong); border-radius:12px; padding:0.5rem; min-height:0; overflow:auto">
-        <div class="mermaid" style="width:100%; max-height:72vh; text-align:center; color:#e6f7ff">
-flowchart TD
-  EE["ExecutorEnd"]
-  EPL["ExecEndPlan"]
-  EN1["ExecEndNode (root)"]
-  L["ExecEndLimit"]
-  EN2["ExecEndNode"]
-  S["ExecEndSort"]
-  EN3["ExecEndNode"]
-  SS["ExecEndSeqScan"]
-  FREE["FreeExecutorState<br/>(drops EState + tuple slots)"]
-
-  EE --> EPL --> EN1 --> L --> EN2 --> S --> EN3 --> SS
-  SS --> FREE
-
-  style EE   fill:#0d3a52,stroke:#5cf0ff,stroke-width:2px,color:#e6f7ff
-  style EPL  fill:#0d3a25,stroke:#7df0a0,color:#e8ffe9
-  style EN1  fill:#0d3a25,stroke:#7df0a0,color:#e8ffe9
-  style EN2  fill:#0d3a25,stroke:#7df0a0,color:#e8ffe9
-  style EN3  fill:#0d3a25,stroke:#7df0a0,color:#e8ffe9
-  style L    fill:#3d2a08,stroke:#ffb547,color:#fff4e1
-  style S    fill:#3d2a08,stroke:#ffb547,color:#fff4e1
-  style SS   fill:#3d2a08,stroke:#ffb547,color:#fff4e1
-  style FREE fill:#2a0d3d,stroke:#c8a8ff,stroke-width:2px,color:#f3e5f5
-        </div>
-      </div>
-      <div class="flex-col" style="gap:0.55rem">
-        <div class="card accent-cyan" style="padding:0.65rem 0.95rem">
-          <h3 style="margin-bottom:0.2rem; font-size:0.95em">與 Start 對稱</h3>
-          <p style="font-size:0.85em"><span class="inline-code">ExecutorStart</span> 用 <span class="inline-code">ExecInitNode</span> 從根遞迴下去把 plan tree 包成 PlanState tree;<span class="inline-code">ExecutorEnd</span> 用 <span class="inline-code">ExecEndNode</span> 反向把它一層層釋放。</p>
-        </div>
-        <div class="card accent-magenta" style="padding:0.65rem 0.95rem">
-          <h3 style="margin-bottom:0.2rem; font-size:0.95em">每個節點各自清理</h3>
-          <p style="font-size:0.85em">不同節點型別有對應的 <span class="inline-code">ExecEnd*</span>:Limit / Sort / Hash / SeqScan / IndexScan / ForeignScan。FDW 在這裡呼叫 <span class="inline-code">EndForeignScan</span> 釋放連線、buffer。</p>
-        </div>
-        <div class="card accent-amber" style="padding:0.65rem 0.95rem">
-          <h3 style="margin-bottom:0.2rem; font-size:0.95em">FreeExecutorState 收尾</h3>
-          <p style="font-size:0.85em">遞迴結束後,<span class="inline-code">FreeExecutorState</span> 釋放 <span class="inline-code">EState</span>、tuple slots、ExprContext 等執行期物件。整段 query 的 ExecutorState memory context 被刪除。</p>
-        </div>
-      </div>
-    </div>
-    <div class="takeaway reveal">ExecutorEnd 是 Start 的對稱反向操作,每個節點依序呼自己的 ExecEnd*,確保連線、暫存、memory context 都正確歸還;§1 的執行器內部到此告一段落, 下一張看這套 hook 機制在 production 裡實際長什麼樣, 以 TimescaleDB 為例。</div>
-  </div>
-  <div class="chrome-bot"><span class="l">// reverse traversal · clean up state tree</span><span class="r">symmetric to ExecutorStart</span></div>
-</section>
-
 
 <!-- ============== SLIDE 08b · Hook 實戰:TimescaleDB ============== -->
 <section class="slide" id="s08b">
@@ -1158,6 +927,71 @@ relocatable = <span class="kw">true</span></div>
   <div class="chrome-bot"><span class="l">// not just bindings — a full toolchain</span><span class="r">PGCF maintained</span></div>
 </section>
 
+<!-- ============== SLIDE 14c · Rust ↔ Datum Mapping × pgrx 寫起來像什麼 (merged 3.4 + 3.5) ============== -->
+<section class="slide" id="s14c">
+  <div class="chrome-top"><span class="l">pgrx.type-bridge</span><span class="r page-no"></span></div>
+  <div class="slide-content">
+    <div class="slide-header reveal"><span class="num">// 3.5</span><h2>Rust ↔ <span class="accent">Datum</span> Mapping × <span class="accent">pgrx 寫起來</span></h2></div>
+    <div class="reveal" style="display:grid; grid-template-columns: 1.25fr 1fr; gap:1rem; align-items:stretch; flex:1; min-height:0">
+      <div class="flex-col" style="gap:0.6rem; min-height:0">
+        <div class="card accent-magenta" style="padding:0.7rem 1rem">
+          <h3 style="margin-bottom:0.25rem; font-size:1.05em">C 版 add_one</h3>
+          <div class="code" style="font-size:0.92em; padding:0.7rem 0.9rem; margin-top:0.3rem; line-height:1.55"><span class="mac">PG_FUNCTION_INFO_V1</span>(<span class="fn">add_one</span>);
+<span class="type">Datum</span> <span class="fn">add_one</span>(<span class="mac">PG_FUNCTION_ARGS</span>) {
+  <span class="kw">if</span> (<span class="mac">PG_ARGISNULL</span>(<span class="num">0</span>))
+    <span class="mac">PG_RETURN_NULL</span>();
+  <span class="kw">int32</span> a = <span class="mac">PG_GETARG_INT32</span>(<span class="num">0</span>);
+  <span class="mac">PG_RETURN_INT32</span>(a + <span class="num">1</span>);
+}</div>
+        </div>
+        <div class="card accent-cyan" style="padding:0.7rem 1rem">
+          <h3 style="margin-bottom:0.25rem; font-size:1.05em">pgrx 版 add_one</h3>
+          <div class="code" style="font-size:0.95em; padding:0.7rem 0.9rem; margin-top:0.3rem; line-height:1.55"><span class="mac">#[pg_extern]</span>
+<span class="kw">fn</span> <span class="fn">add_one</span>(
+  a: <span class="type">Option</span>&lt;<span class="type">i32</span>&gt;
+) -&gt; <span class="type">Option</span>&lt;<span class="type">i32</span>&gt; {
+  a.<span class="fn">map</span>(|v| v + <span class="num">1</span>)
+}</div>
+          <p style="font-size:0.9em; margin-top:0.45rem; color:var(--text-dim)">7 行 → 3 行,NULL 由 <span class="inline-code">Option</span> 處理。</p>
+        </div>
+      </div>
+      <div class="flex-col" style="gap:0.5rem; min-height:0">
+        <div class="card accent-amber" style="padding:0.55rem 0.85rem">
+          <h3 style="margin-bottom:0.2rem; font-size:0.92em">Rust ↔ PostgreSQL 型別對照</h3>
+          <table style="font-size:0.82em; margin-top:0.2rem">
+            <thead><tr><th>Rust</th><th>PostgreSQL</th></tr></thead>
+            <tbody>
+              <tr><td class="mono cyan">i16 / i32 / i64</td><td>int2 / int4 / int8</td></tr>
+              <tr><td class="mono cyan">f32 / f64</td><td>real / double precision</td></tr>
+              <tr><td class="mono cyan">String / &amp;str</td><td>text</td></tr>
+              <tr><td class="mono cyan">Vec&lt;T&gt;</td><td>T[] (array)</td></tr>
+              <tr><td class="mono cyan">Option&lt;T&gt;</td><td><strong class="cyan">NULL handling</strong></td></tr>
+              <tr><td class="mono cyan">pgrx::JsonB</td><td>jsonb</td></tr>
+              <tr><td class="mono cyan">pgrx::Date / Timestamp</td><td>date / timestamp</td></tr>
+              <tr><td class="mono cyan">pgrx::Uuid</td><td>uuid</td></tr>
+              <tr><td class="mono cyan">SetOfIterator&lt;T&gt;</td><td>SETOF T (SRF)</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="card accent-magenta" style="padding:0.5rem 0.85rem">
+          <h3 style="margin-bottom:0.15rem; font-size:0.88em">pgrx 替你做的事</h3>
+          <ul class="bullet" style="font-size:0.8em; line-height:1.5">
+            <li><span class="inline-code">#[pg_extern]</span> 自動產 <span class="inline-code">CREATE FUNCTION</span> SQL</li>
+            <li>Rust 型別自動對映 PG 型別、<span class="inline-code">Option</span> 處理 NULL</li>
+            <li><span class="inline-code">Result&lt;_, E&gt;</span> Err 自動轉 <span class="inline-code">ereport(ERROR)</span></li>
+            <li><span class="inline-code">#[pg_test]</span> 跑在真的 PG 裡,不是 mock</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+    <div class="takeaway reveal">一行 <span class="inline-code">#[pg_extern]</span> 同時拿到 SQL 自動產生、型別自動對映、<span class="inline-code">Option</span> NULL safety、<span class="inline-code">#[pg_test]</span> 跑在真 PG 裡, C 寫法的 80% 樣板就被吃掉了。</div>
+    <div class="card reveal" style="margin-top:0.35rem; padding:0.4rem 0.85rem; border-left:3px solid #5cf0ff">
+      <p style="font-size:0.78em; color:var(--text-dim)">完整型別對照與自訂 type 範例:<a href="https://github.com/pgcentralfoundation/pgrx" target="_blank" rel="noopener" class="cyan" style="text-decoration:none">github.com/pgcentralfoundation/pgrx</a> · <a href="https://docs.rs/pgrx" target="_blank" rel="noopener" class="cyan" style="text-decoration:none">docs.rs/pgrx</a>;也支援 <span class="inline-code">numeric</span>、<span class="inline-code">timestamptz</span>、<span class="inline-code">interval</span>、<span class="inline-code">inet</span>、<span class="inline-code">bytea</span>、<span class="inline-code">range</span>、composite 等。</p>
+    </div>
+  </div>
+  <div class="chrome-bot"><span class="l">// type system handles types + NULLs + tests</span><span class="r">one attribute, four wins</span></div>
+</section>
+
 <!-- ============== SLIDE 14b · pgrx ABI / FFI 流程 ============== -->
 <section class="slide" id="s14b">
   <div class="chrome-top"><span class="l">pgrx.abi</span><span class="r page-no"></span></div>
@@ -1290,71 +1124,6 @@ flowchart TD
     <div class="takeaway reveal">_PG_init 是 extension 的初始化進入點,完成註冊後即等待 PostgreSQL 透過 hook 回呼;接下來看在這個進入點裡實際會處理什麼樣的型別轉換, Rust ↔ Datum 是 pgrx 一行 attribute 在做的事。</div>
   </div>
   <div class="chrome-bot"><span class="l">// dlopen → magic check → _PG_init</span><span class="r">register, then wait</span></div>
-</section>
-
-<!-- ============== SLIDE 14c · Rust ↔ Datum Mapping × pgrx 寫起來像什麼 (merged 3.4 + 3.5) ============== -->
-<section class="slide" id="s14c">
-  <div class="chrome-top"><span class="l">pgrx.type-bridge</span><span class="r page-no"></span></div>
-  <div class="slide-content">
-    <div class="slide-header reveal"><span class="num">// 3.5</span><h2>Rust ↔ <span class="accent">Datum</span> Mapping × <span class="accent">pgrx 寫起來</span></h2></div>
-    <div class="reveal" style="display:grid; grid-template-columns: 1.25fr 1fr; gap:1rem; align-items:stretch; flex:1; min-height:0">
-      <div class="flex-col" style="gap:0.6rem; min-height:0">
-        <div class="card accent-magenta" style="padding:0.7rem 1rem">
-          <h3 style="margin-bottom:0.25rem; font-size:1.05em">C 版 add_one</h3>
-          <div class="code" style="font-size:0.92em; padding:0.7rem 0.9rem; margin-top:0.3rem; line-height:1.55"><span class="mac">PG_FUNCTION_INFO_V1</span>(<span class="fn">add_one</span>);
-<span class="type">Datum</span> <span class="fn">add_one</span>(<span class="mac">PG_FUNCTION_ARGS</span>) {
-  <span class="kw">if</span> (<span class="mac">PG_ARGISNULL</span>(<span class="num">0</span>))
-    <span class="mac">PG_RETURN_NULL</span>();
-  <span class="kw">int32</span> a = <span class="mac">PG_GETARG_INT32</span>(<span class="num">0</span>);
-  <span class="mac">PG_RETURN_INT32</span>(a + <span class="num">1</span>);
-}</div>
-        </div>
-        <div class="card accent-cyan" style="padding:0.7rem 1rem">
-          <h3 style="margin-bottom:0.25rem; font-size:1.05em">pgrx 版 add_one</h3>
-          <div class="code" style="font-size:0.95em; padding:0.7rem 0.9rem; margin-top:0.3rem; line-height:1.55"><span class="mac">#[pg_extern]</span>
-<span class="kw">fn</span> <span class="fn">add_one</span>(
-  a: <span class="type">Option</span>&lt;<span class="type">i32</span>&gt;
-) -&gt; <span class="type">Option</span>&lt;<span class="type">i32</span>&gt; {
-  a.<span class="fn">map</span>(|v| v + <span class="num">1</span>)
-}</div>
-          <p style="font-size:0.9em; margin-top:0.45rem; color:var(--text-dim)">7 行 → 3 行,NULL 由 <span class="inline-code">Option</span> 處理。</p>
-        </div>
-      </div>
-      <div class="flex-col" style="gap:0.5rem; min-height:0">
-        <div class="card accent-amber" style="padding:0.55rem 0.85rem">
-          <h3 style="margin-bottom:0.2rem; font-size:0.92em">Rust ↔ PostgreSQL 型別對照</h3>
-          <table style="font-size:0.82em; margin-top:0.2rem">
-            <thead><tr><th>Rust</th><th>PostgreSQL</th></tr></thead>
-            <tbody>
-              <tr><td class="mono cyan">i16 / i32 / i64</td><td>int2 / int4 / int8</td></tr>
-              <tr><td class="mono cyan">f32 / f64</td><td>real / double precision</td></tr>
-              <tr><td class="mono cyan">String / &amp;str</td><td>text</td></tr>
-              <tr><td class="mono cyan">Vec&lt;T&gt;</td><td>T[] (array)</td></tr>
-              <tr><td class="mono cyan">Option&lt;T&gt;</td><td><strong class="cyan">NULL handling</strong></td></tr>
-              <tr><td class="mono cyan">pgrx::JsonB</td><td>jsonb</td></tr>
-              <tr><td class="mono cyan">pgrx::Date / Timestamp</td><td>date / timestamp</td></tr>
-              <tr><td class="mono cyan">pgrx::Uuid</td><td>uuid</td></tr>
-              <tr><td class="mono cyan">SetOfIterator&lt;T&gt;</td><td>SETOF T (SRF)</td></tr>
-            </tbody>
-          </table>
-        </div>
-        <div class="card accent-magenta" style="padding:0.5rem 0.85rem">
-          <h3 style="margin-bottom:0.15rem; font-size:0.88em">pgrx 替你做的事</h3>
-          <ul class="bullet" style="font-size:0.8em; line-height:1.5">
-            <li><span class="inline-code">#[pg_extern]</span> 自動產 <span class="inline-code">CREATE FUNCTION</span> SQL</li>
-            <li>Rust 型別自動對映 PG 型別、<span class="inline-code">Option</span> 處理 NULL</li>
-            <li><span class="inline-code">Result&lt;_, E&gt;</span> Err 自動轉 <span class="inline-code">ereport(ERROR)</span></li>
-            <li><span class="inline-code">#[pg_test]</span> 跑在真的 PG 裡,不是 mock</li>
-          </ul>
-        </div>
-      </div>
-    </div>
-    <div class="takeaway reveal">一行 <span class="inline-code">#[pg_extern]</span> 同時拿到 SQL 自動產生、型別自動對映、<span class="inline-code">Option</span> NULL safety、<span class="inline-code">#[pg_test]</span> 跑在真 PG 裡, C 寫法的 80% 樣板就被吃掉了。</div>
-    <div class="card reveal" style="margin-top:0.35rem; padding:0.4rem 0.85rem; border-left:3px solid #5cf0ff">
-      <p style="font-size:0.78em; color:var(--text-dim)">完整型別對照與自訂 type 範例:<a href="https://github.com/pgcentralfoundation/pgrx" target="_blank" rel="noopener" class="cyan" style="text-decoration:none">github.com/pgcentralfoundation/pgrx</a> · <a href="https://docs.rs/pgrx" target="_blank" rel="noopener" class="cyan" style="text-decoration:none">docs.rs/pgrx</a>;也支援 <span class="inline-code">numeric</span>、<span class="inline-code">timestamptz</span>、<span class="inline-code">interval</span>、<span class="inline-code">inet</span>、<span class="inline-code">bytea</span>、<span class="inline-code">range</span>、composite 等。</p>
-    </div>
-  </div>
-  <div class="chrome-bot"><span class="l">// type system handles types + NULLs + tests</span><span class="r">one attribute, four wins</span></div>
 </section>
 
 
