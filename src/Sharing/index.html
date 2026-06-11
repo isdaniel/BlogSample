@@ -17,19 +17,19 @@ html { scroll-snap-type: y mandatory; scroll-behavior: smooth; }
 .slide { width: 100vw; height: 100vh; height: 100dvh; overflow: hidden; scroll-snap-align: start; display: flex; flex-direction: column; position: relative; }
 .slide-content { flex: 1; display: flex; flex-direction: column; justify-content: center; max-height: 100%; overflow: hidden; padding: var(--slide-padding); position: relative; z-index: 2; }
 :root {
-  --title-size: clamp(1.6rem, 5vw, 4rem);
-  --h2-size: clamp(1.2rem, 3.2vw, 2.4rem);
-  --h3-size: clamp(0.95rem, 2vw, 1.5rem);
-  --body-size: clamp(0.72rem, 1.25vw, 1.05rem);
-  --small-size: clamp(0.6rem, 0.9vw, 0.82rem);
+  --title-size: clamp(2rem, 6.25vw, 5rem);
+  --h2-size: clamp(1.5rem, 4vw, 3rem);
+  --h3-size: clamp(1.1875rem, 2.5vw, 1.875rem);
+  --body-size: clamp(0.9rem, 1.5625vw, 1.3125rem);
+  --small-size: clamp(0.75rem, 1.125vw, 1.025rem);
   --slide-padding: clamp(1rem, 3.5vw, 3.5rem);
   --content-gap: clamp(0.5rem, 1.5vw, 1.5rem);
   --element-gap: clamp(0.25rem, 0.8vw, 0.8rem);
 }
 .card, .container, .content-box { max-width: min(95vw, 1400px); }
 img, .image-container { max-width: 100%; max-height: min(50vh, 400px); object-fit: contain; }
-@media (max-height: 700px) { :root { --slide-padding: clamp(0.75rem, 2.5vw, 1.8rem); --content-gap: clamp(0.4rem, 1.2vw, 1rem); --title-size: clamp(1.3rem, 4.2vw, 2.5rem); --h2-size: clamp(1rem, 2.8vw, 1.7rem); --body-size: clamp(0.7rem, 1.1vw, 0.95rem); } }
-@media (max-height: 600px) { :root { --slide-padding: clamp(0.5rem, 2vw, 1.2rem); --title-size: clamp(1.1rem, 3.8vw, 2rem); --body-size: clamp(0.65rem, 1vw, 0.85rem); } .chrome-top, .chrome-bot, .nav-dots { display: none; } }
+@media (max-height: 700px) { :root { --slide-padding: clamp(0.75rem, 2.5vw, 1.8rem); --content-gap: clamp(0.4rem, 1.2vw, 1rem); --title-size: clamp(1.625rem, 5.25vw, 3.125rem); --h2-size: clamp(1.25rem, 3.5vw, 2.125rem); --body-size: clamp(0.875rem, 1.375vw, 1.1875rem); } }
+@media (max-height: 600px) { :root { --slide-padding: clamp(0.5rem, 2vw, 1.2rem); --title-size: clamp(1.375rem, 4.75vw, 2.5rem); --body-size: clamp(0.8125rem, 1.25vw, 1.0625rem); } .chrome-top, .chrome-bot, .nav-dots { display: none; } }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.2s !important; } html { scroll-behavior: auto; } }
 
 /* ===========================================
@@ -679,7 +679,7 @@ SELECT now(), random()*1e8+1, random(), ...;</div>
         </ul>
       </div>
     </div>
-    <div class="takeaway reveal">四個生命週期裡 Start / Run / End 幾乎所有 query 都會走,Finish 只在 DML + AFTER trigger 時觸發;接下來逐一拆解這幾個階段裡到底發生什麼。</div>
+    <div class="takeaway reveal">四個生命週期裡 Start / Run / End 幾乎所有 query 都會走,Finish 只在 DML + AFTER trigger 時觸發。</div>
   </div>
   <div class="chrome-bot"><span class="l">// init → run → finish → end</span><span class="r">每個都是 function pointer</span></div>
 </section>
@@ -697,11 +697,11 @@ SELECT now(), random()*1e8+1, random(), ...;</div>
       <div class="grid-3" style="gap:0.6rem">
         <div class="card accent-cyan" style="padding:0.6rem 0.85rem">
           <h3 style="margin-bottom:0.2rem; font-size:1em">EXPLAIN 讀法</h3>
-          <p style="font-size:0.88em; line-height:1.55">普通 INSERT 只會看到 <span class="inline-code">Insert on …</span>。TimescaleDB 包成兩層 Custom Scan:<strong class="cyan">HypertableInsert</strong> 在外層接 row、<strong class="cyan">ChunkDispatch</strong> 在內層分派到正確 time chunk。括號裡的 cost / rows / loops 跟內建節點一樣,planner 視為一級公民。</p>
+          <p style="font-size:1.01em; line-height:1.55">普通 INSERT 只會看到 <span class="inline-code">Insert on …</span>。TimescaleDB 包成兩層 Custom Scan:<strong class="cyan">HypertableInsert</strong> 在外層接 row、<strong class="cyan">ChunkDispatch</strong> 在內層分派到正確 time chunk。括號裡的 cost / rows / loops 跟內建節點一樣,planner 視為一級公民。</p>
         </div>
         <div class="card accent-magenta" style="padding:0.6rem 0.85rem">
           <h3 style="margin-bottom:0.2rem; font-size:1em">TimescaleDB 用到的 hook</h3>
-          <ul class="bullet" style="font-size:0.86em; line-height:1.55">
+          <ul class="bullet" style="font-size:0.88em; line-height:1.55">
             <li><span class="inline-code">planner_hook</span>, 偵測 hypertable 改寫 plan</li>
             <li><span class="inline-code">ProcessUtility_hook</span>, 攔 CREATE TABLE 自動建 chunk</li>
             <li><span class="inline-code">CustomScan</span> API, 注入 HypertableInsert / ChunkDispatch / ChunkAppend</li>
@@ -710,7 +710,7 @@ SELECT now(), random()*1e8+1, random(), ...;</div>
         </div>
         <div class="card" style="padding:0.6rem 0.85rem; border-left:3px solid #c8a8ff">
           <h3 style="margin-bottom:0.2rem; font-size:1em">同模式的其他 extension</h3>
-          <ul class="bullet" style="font-size:0.86em; line-height:1.55">
+          <ul class="bullet" style="font-size:0.88em; line-height:1.55">
             <li><strong>Citus</strong>, 分散式 sharding;planner_hook 把 query 改寫成多 worker 子查詢</li>
             <li><strong>pgvector (HNSW)</strong>, 用 Index Access Method 自訂索引</li>
             <li><strong>ParadeDB</strong>, CustomScan + table AM 整合 BM25 全文檢索</li>
@@ -755,7 +755,7 @@ SELECT now(), random()*1e8+1, random(), ...;</div>
         </div>
         <div class="card accent-cyan" style="padding:0.55rem 0.9rem">
           <h3 style="margin-bottom:0.15rem; font-size:0.9em">Extension 標準寫法(替換型)</h3>
-          <div class="code" style="font-size:0.7em; padding:0.45rem 0.65rem; margin-top:0.15rem"><span class="kw">static</span> <span class="fn">planner_hook_type</span> prev;
+          <div class="code" style="font-size:0.8em; padding:0.45rem 0.65rem; margin-top:0.15rem"><span class="kw">static</span> <span class="fn">planner_hook_type</span> prev;
 <span class="kw">void</span> <span class="fn">_PG_init</span>() {
   prev = planner_hook;
   planner_hook = my_planner;
@@ -862,8 +862,8 @@ relocatable = <span class="kw">true</span></div>
     <div class="grid-3 reveal" style="gap:1rem">
       <div class="card accent-magenta" style="padding:0.95rem 1.2rem">
         <h3 style="margin-bottom:0.4rem; font-size:1.1em">Pain 01 · ABI 變動</h3>
-        <p style="font-size:0.95em; line-height:1.55">PG 每個 major version 動 ABI,同一份 <span class="inline-code">.so</span> 不能跨版本;internal API 沒 stability guarantee。</p>
-        <p style="font-size:0.85em; color:var(--text-mute); margin-top:0.55rem">多版本支援 = #ifdef 地獄</p>
+        <p style="font-size:0.95em; line-height:1.55">PG 每個 major version 動 ABI:struct 欄位重排、API 重命名、internal header 搬位置。</p>
+        <p style="font-size:0.85em; color:var(--text-mute); margin-top:0.55rem">C 端 header 跟 runtime PG 版本不一致時 compile 不會察覺, 跑起來才 silent 壞掉;pgrx 用 cargo feature 把 binding 綁住版本, 不匹配編譯就過不了。</p>
       </div>
 
       <div class="card accent-amber" style="padding:0.95rem 1.2rem">
@@ -1029,16 +1029,16 @@ flowchart TD
       <!-- 右欄:三層對照程式碼 -->
       <div class="flex-col" style="gap:0.45rem; min-height:0">
         <div class="card accent-magenta" style="padding:0.55rem 0.9rem">
-          <h3 style="margin-bottom:0.15rem; font-size:0.95em">三層抽象,同一段功能</h3>
-          <p style="font-size:0.83em">同一個取 datum 的動作,從 C → pg_sys raw FFI → pgrx 安全 API,逐層抽象。</p>
+          <h3 style="margin-bottom:0.15rem; font-size:0.95em">三層抽象,同一個 API</h3>
+          <p style="font-size:0.83em">同一個 <span class="inline-code">pg_proc_aclmask</span> 權限檢查,從 (1) C header → (2) bindgen 產的 raw FFI → (3) 高層 <span class="inline-code">#[pg_extern]</span> wrapper 呼叫 (2),三層串起來。</p>
         </div>
-        <div class="code" style="font-size:0.74em; padding:0.55rem 0.85rem; line-height:1.45">
+        <div class="code" style="font-size:0.81em; padding:0.55rem 0.85rem; line-height:1.45">
 <span class="com">// (1) 原生 C — PG header</span>
 <span class="kw">extern</span> Datum <span class="fn">pg_proc_aclmask</span>(
     Oid roleid, Oid procoid,
     <span class="type">AclMode</span> mask, <span class="type">AclMaskHow</span> how);
         </div>
-        <div class="code" style="font-size:0.74em; padding:0.55rem 0.85rem; line-height:1.45">
+        <div class="code" style="font-size:0.81em; padding:0.55rem 0.85rem; line-height:1.45">
 <span class="com">// (2) bindgen 產出 — pg_sys (raw FFI, unsafe)</span>
 <span class="kw">unsafe extern</span> <span class="str">"C"</span> {
     <span class="kw">pub fn</span> <span class="fn">pg_proc_aclmask</span>(
@@ -1048,12 +1048,19 @@ flowchart TD
         how: <span class="type">pg_sys::AclMaskHow</span>) -&gt; <span class="type">Datum</span>;
 }
         </div>
-        <div class="code" style="font-size:0.74em; padding:0.55rem 0.85rem; line-height:1.45">
+        <div class="code" style="font-size:0.81em; padding:0.55rem 0.85rem; line-height:1.45">
 <span class="com">// (3) 用戶 Rust — pgrx 高層 API,自動產生 SQL</span>
 <span class="mac">#[pg_extern]</span>
-<span class="kw">fn</span> <span class="fn">add</span>(a: <span class="type">i64</span>, b: <span class="type">i64</span>) -&gt; <span class="type">i64</span> {
-    <span class="com">// pgrx 自動把 i64 ↔ bigint, panic ↔ ereport</span>
-    a + b
+<span class="kw">fn</span> <span class="fn">check_proc_acl</span>(role: <span class="type">pg_sys::Oid</span>, proc: <span class="type">pg_sys::Oid</span>) -&gt; <span class="type">bool</span> {
+    <span class="com">// 高層 fn 內部呼叫 (2) 的 raw FFI,</span>
+    <span class="com">// (2) 對應 (1) 的 C 函式</span>
+    <span class="kw">let</span> mask = <span class="kw">unsafe</span> {
+        <span class="type">pg_sys</span>::<span class="fn">pg_proc_aclmask</span>(
+            role, proc,
+            <span class="type">pg_sys</span>::ACL_EXECUTE <span class="kw">as</span> _,
+            <span class="type">pg_sys</span>::AclMaskHow::ACLMASK_ANY)
+    };
+    mask != <span class="num">0</span>   <span class="com">// pgrx: bool ↔ boolean, panic ↔ ereport</span>
 }
         </div>
       </div>
@@ -1079,7 +1086,6 @@ flowchart TD
       </div>
     </div>
 
-    <div class="takeaway reveal">pgrx 的工作不是「綁定」而是<strong>三層抽象 + 工具鏈整合</strong>:bindgen 處理 ABI、安全 wrapper 處理生命週期、cargo-pgrx 處理 build / test / install;下一張看 extension 載入時的入口, _PG_init 與 Magic Block 在 pgrx 寫起來長什麼樣。</div>
   </div>
   <div class="chrome-bot"><span class="l">// bindgen → pg_sys → safe wrappers → your code</span><span class="r">three layers, one cargo cmd</span></div>
 </section>
@@ -1365,7 +1371,7 @@ flowchart TD
             <li>交給 PG 管 → <span class="inline-code">.into_pg()</span></li>
           </ul>
         </div>
-        <div class="code" style="font-size:0.74em; padding:0.55rem 0.8rem; line-height:1.55">
+        <div class="code" style="font-size:0.85em; padding:0.55rem 0.8rem; line-height:1.55">
 <span class="com">// 從 C API 拿指標</span>
 <span class="kw">unsafe</span> {
   <span class="kw">let</span> tuple: <span class="type">PgBox</span>&lt;<span class="type">HeapTupleData</span>, <span class="type">AllocatedByPostgres</span>&gt;
@@ -1389,7 +1395,7 @@ node.cursor = <span class="num">0</span>;
             <li>適合跨整個 query 生命週期的 state(FDW、cursor)</li>
           </ul>
         </div>
-        <div class="code" style="font-size:0.74em; padding:0.55rem 0.8rem; line-height:1.55">
+        <div class="code" style="font-size:0.85em; padding:0.55rem 0.8rem; line-height:1.55">
 <span class="com">// redis_fdw_rs 把 FDW state 綁進 context</span>
 <span class="kw">let</span> ctx = <span class="fn">create_wrappers_memctx</span>(
     &amp;<span class="fn">format!</span>(<span class="str">"Wrappers_scan_{}"</span>,
@@ -1541,16 +1547,16 @@ flowchart TD
       <!-- 左:撞擊兩個方向 + #[pg_guard] 解法 -->
       <div class="flex-col" style="gap:0.5rem; min-height:0">
         <div class="card accent-magenta" style="padding:0.55rem 0.9rem">
-          <h3 style="margin-bottom:0.15rem; font-size:0.92em">longjmp 跳過 Rust frame</h3>
-          <p style="font-size:0.82em; line-height:1.5">PG <span class="inline-code">ereport(ERROR)</span> 一發 siglongjmp 跳過 Rust 函式, <strong>Drop 不跑</strong>, File 不關、Connection 不還、Vec leak。</p>
+          <h3 style="margin-bottom:0.15rem; font-size:0.95em">longjmp 跳過 Rust frame</h3>
+          <p style="font-size:0.9em; line-height:1.5">PG <span class="inline-code">ereport(ERROR)</span> 一發 siglongjmp 跳過 Rust 函式, <strong>Drop 不跑</strong>, File 不關、Connection 不還、Vec leak。</p>
         </div>
         <div class="card accent-magenta" style="padding:0.55rem 0.9rem">
-          <h3 style="margin-bottom:0.15rem; font-size:0.92em">panic 跳過 C frame</h3>
-          <p style="font-size:0.82em; line-height:1.5">Rust <span class="inline-code">panic!</span> 沒被攔下就回 C,PG 的 MemoryContextSwitchTo 還沒切回上層, backend 全域狀態 UB。</p>
+          <h3 style="margin-bottom:0.15rem; font-size:0.95em">panic 跳過 C frame</h3>
+          <p style="font-size:0.9em; line-height:1.5">Rust <span class="inline-code">panic!</span> 沒被攔下就回 C,PG 的 MemoryContextSwitchTo 還沒切回上層, backend 全域狀態 UB。</p>
         </div>
         <div class="card accent-cyan" style="padding:0.55rem 0.9rem">
-          <h3 style="margin-bottom:0.15rem; font-size:0.92em"><span class="inline-code">#[pg_guard]</span> 雙向轉譯</h3>
-          <ul class="bullet" style="font-size:0.82em; line-height:1.5">
+          <h3 style="margin-bottom:0.15rem; font-size:0.95em"><span class="inline-code">#[pg_guard]</span> 雙向轉譯</h3>
+          <ul class="bullet" style="font-size:0.9em; line-height:1.5">
             <li>Rust → C 出去:catch panic → <span class="inline-code">ereport(ERROR)</span></li>
             <li>C → Rust 進來:longjmp 接住 → <span class="inline-code">Result::Err</span></li>
             <li>兩邊清理機制都能正常觸發</li>
@@ -1560,12 +1566,12 @@ flowchart TD
 
       <!-- 右:Cargo.toml + FDW callback code -->
       <div class="flex-col" style="gap:0.5rem; min-height:0">
-        <div class="code" style="font-size:0.78em; padding:0.55rem 0.85rem; line-height:1.5"><span class="com"># Cargo.toml — panic 必須是 unwind</span>
+        <div class="code" style="font-size:0.9em; padding:0.55rem 0.85rem; line-height:1.5"><span class="com"># Cargo.toml — panic 必須是 unwind</span>
 [<span class="type">profile.dev</span>]
 panic = <span class="str">"unwind"</span>
 [<span class="type">profile.release</span>]
 panic = <span class="str">"unwind"</span></div>
-        <div class="code" style="font-size:0.78em; padding:0.55rem 0.85rem; line-height:1.5"><span class="com">// FDW callback 標準寫法</span>
+        <div class="code" style="font-size:0.9em; padding:0.55rem 0.85rem; line-height:1.5"><span class="com">// FDW callback 標準寫法</span>
 <span class="mac">#[pg_guard]</span>
 <span class="kw">extern</span> <span class="str">"C-unwind"</span> <span class="kw">fn</span> <span class="fn">begin_foreign_scan</span>(
     node: *<span class="kw">mut</span> <span class="type">ForeignScanState</span>,
@@ -1581,7 +1587,7 @@ panic = <span class="str">"unwind"</span></div>
     <div class="reveal" style="display:grid; grid-template-columns: 1fr 1fr; gap:1rem; margin-top:0.55rem">
       <div class="card accent-cyan" style="padding:0.6rem 0.95rem">
         <h3 style="margin-bottom:0.2rem; font-size:0.95em">編譯期就能保證的</h3>
-        <ul class="bullet" style="font-size:0.84em; line-height:1.5">
+        <ul class="bullet" style="font-size:0.9em; line-height:1.5">
           <li>Rust 端配的記憶體不會 leak / double-free / dangling</li>
           <li>所有權清楚, 誰負責 drop 是型別的事</li>
           <li>panic 不會穿過 FFI 邊界</li>
@@ -1590,7 +1596,7 @@ panic = <span class="str">"unwind"</span></div>
       </div>
       <div class="card accent-magenta" style="padding:0.6rem 0.95rem">
         <h3 style="margin-bottom:0.2rem; font-size:0.95em">仍需開發者注意的</h3>
-        <ul class="bullet" style="font-size:0.84em; line-height:1.5">
+        <ul class="bullet" style="font-size:0.9em; line-height:1.5">
           <li>C API 拿到的 pointer 若被 PG 提前釋放, 無法靜態檢查</li>
           <li>跨 MemoryContext 持有指標(context reset 後失效)</li>
           <li><span class="inline-code">unsafe</span> 區塊(直接戳 <span class="inline-code">pg_sys::*</span>)</li>
